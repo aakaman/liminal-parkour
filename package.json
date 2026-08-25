@@ -1,0 +1,19 @@
+{
+  "name": "liminal-parkour",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "A forward-only parkour game across endless wooden beams (gameplay-first prototype).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "e2e": "node e2e/smoke.mjs"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "vite": "^6.3.5"
+  }
+}

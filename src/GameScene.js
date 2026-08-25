@@ -53,49 +53,59 @@ export class GameScene extends Phaser.Scene {
   }
 
   makeBackground() {
-    const g = this.add.graphics();
-    const h = TUNE.height;
-    g.fillGradientStyle(PAL.skyTop, PAL.skyTop, PAL.skyBottom, PAL.skyBottom, 1);
-    g.fillRect(0, 0, TUNE.width, h);
-    g.generateTexture('sky', TUNE.width, h);
-    g.destroy();
-    this.add.image(TUNE.width / 2, h / 2, 'sky').setScrollFactor(0).setDepth(-50);
+    const c = document.createElement('canvas');
+    c.width = TUNE.width; c.height = TUNE.height;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, TUNE.height);
+    grad.addColorStop(0, PAL.skyTop);
+    grad.addColorStop(1, PAL.skyBottom);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, TUNE.width, TUNE.height);
+    this.textures.addCanvas('sky', c);
+    this.add.image(TUNE.width / 2, TUNE.height / 2, 'sky').setScrollFactor(0).setDepth(-50);
   }
 
   addPlank(x, y, len) {
-    const g = this.add.graphics();
+    const c = document.createElement('canvas');
+    c.width = len; c.height = TUNE.plankHeight;
+    const ctx = c.getContext('2d');
     const H = TUNE.plankHeight;
     const P = PAL;
-    // --- Draw a horizontal wooden LOG ---
-    // Backdrop: bark body.
-    g.fillStyle(P.plankWhole, 1);
-    g.fillRoundedRect(0, 3, len, H - 4, 4);
-    g.fillStyle(P.plankWholeDark, 1);
-    g.fillRect(0, 3, len, (H - 4) / 2);          // subtle top-to-bottom shade
-    // Grain arcs across the bark (log-ring feel), lighter strokes.
-    g.lineStyle(1, P.plankRing, 0.5);
-    for (let i = 4; i < len; i += 12) {
-      g.beginPath();
-      g.arc(i, 3 + (H - 4) / 2, (H - 4) / 2 + 2, Math.PI, 0, false);
-      g.strokePath();
-    }
-    // Bark side ticks near the bottom (rough bark).
-    g.lineStyle(1, P.plankEdge, 0.4);
-    for (let i = 6; i < len; i += 10) {
-      g.beginPath(); g.moveTo(i, H - 7); g.lineTo(i + 5, H - 3); g.strokePath();
-    }
-    // Rounded ends (log cross-section hint) already given by fillRoundedRect.
-    // Bright TOP landing face ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the runner actually stands on this.
-    g.fillStyle(P.plankTop, 1);
-    g.fillRoundedRect(0, 0, len, 8, { tl: 4, tr: 4, bl: 0, br: 0 });
-    g.fillStyle(P.plankTopHi, 0.9);
-    g.fillRect(0, 2, len, 2);                     // highlight line on the top
+    // --- Draw a horizontal wooden LOG (brown bark body + bright top face) ---
+    // Wood body: bark / wood block.
+    ctx.fillStyle = P.plankWhole;
+    ctx.fillRect(0, 3, len, H - 4);
+    // Top-to-bottom shading on the body (darker near the top).
+    ctx.fillStyle = P.plankWholeDark;
+    ctx.fillRect(0, 3, len, (H - 4) / 2);
+    // Vertical wood-grain lines across the body.
+    ctx.strokeStyle = P.plankRing;
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 6; i < len; i += 12) { ctx.moveTo(i, 3); ctx.lineTo(i, H - 1); }
+    ctx.stroke();
+    // Rough-bark edge ticks near the bottom.
+    ctx.strokeStyle = P.plankEdge;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    for (let i = 6; i < len; i += 10) { ctx.moveTo(i, H - 7); ctx.lineTo(i + 5, H - 3); }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Bright TOP landing face - the runner stands on this.
+    ctx.fillStyle = P.plankTop;
+    ctx.fillRect(0, 0, len, 7);
+    ctx.fillStyle = P.plankTopHi;
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(0, 2, len, 2);                     // highlight line on the top
+    ctx.globalAlpha = 1;
     // Soft shadow cast by the log onto whatever is below.
-    g.fillStyle('#2e2418', 0.18);
-    g.fillRect(0, H - 3, len, 3);
+    ctx.fillStyle = '#2e2418';
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(0, H - 3, len, 3);
+    ctx.globalAlpha = 1;
 
-    g.generateTexture('plank' + len, len, H);
-    g.destroy();
+    this.textures.addCanvas('plank' + len, c);
 
     const plank = this.planks.create(x + len / 2, y, 'plank' + len);
     const body = plank.body;
@@ -108,39 +118,56 @@ export class GameScene extends Phaser.Scene {
   }
 
   makePlayer() {
-    // Idle/run frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â tall, legs apart (mid stride).
-    const r = this.add.graphics();
-    r.fillStyle(PAL.playerAccent, 1);
-    r.fillRect(3, 2, 16, 6);                     // cap
-    r.fillStyle(PAL.player, 1);
-    r.fillRect(3, 7, 16, 4);                     // head
-    r.fillRoundedRect(3, 12, 16, 18, 3);         // torso
-    r.fillRect(5, 29, 5, 6);                     // rear leg
-    r.fillRect(12, 28, 5, 7);                    // front leg
-    r.fillRect(6, 33, 5, 3);                     // rear foot
-    r.fillRect(12, 33, 6, 3);                    // front foot
-    r.fillStyle('#6a6053', 1);
-    r.fillRect(1, 34, 20, 2);                    // arm swung at side
-    r.generateTexture('runner-run', 22, 36);
-    r.destroy();
+    // Draw the runner frames on a plain canvas (reliable colors) and
+    // register them as textures.
+    const draw = (ctx, tuck) => {
+      // Cap (accent).
+      ctx.fillStyle = PAL.playerAccent;
+      ctx.fillRect(3, 2, 16, 6);
+      // Head + torso (rounded), in the runner's dark color.
+      ctx.fillStyle = PAL.player;
+      ctx.fillRect(3, 7, 16, 4);
+      ctx.beginPath();
+      ctx.moveTo(6, 12); ctx.lineTo(19, 12);
+      ctx.quadraticCurveTo(22, 12, 22, 15);
+      ctx.lineTo(22, 27);
+      ctx.quadraticCurveTo(22, 30, 19, 30);
+      ctx.lineTo(6, 30);
+      ctx.quadraticCurveTo(3, 30, 3, 27);
+      ctx.lineTo(3, 15);
+      ctx.quadraticCurveTo(3, 12, 6, 12);
+      ctx.fill();
+      const grey = '#6a6053';
+      if (!tuck) {
+        // Run frame: legs apart (mid stride), arm swung at side.
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(5, 29, 5, 6);       // rear leg
+        ctx.fillRect(12, 28, 5, 7);      // front leg
+        ctx.fillRect(6, 33, 5, 3);       // rear foot
+        ctx.fillRect(12, 33, 6, 3);      // front foot
+        ctx.fillStyle = grey;
+        ctx.fillRect(1, 34, 20, 2);      // arm at side
+      } else {
+        // Jump frame: legs tucked under the body, arm up / forward.
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(5, 27, 6, 5);       // tucked thigh
+        ctx.fillRect(12, 27, 6, 5);      // tucked thigh
+        ctx.fillRect(5, 31, 6, 3);       // tucked shin
+        ctx.fillRect(12, 31, 6, 3);      // tucked shin
+        ctx.fillStyle = grey;
+        ctx.fillRect(1, 20, 6, 12);      // arm up / forward
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(15, 20, 5, 5);      // other arm back
+      }
+    };
 
-    // Jump frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â legs tucked under the body, slightly leaned back.
-    const j = this.add.graphics();
-    j.fillStyle(PAL.playerAccent, 1);
-    j.fillRect(3, 2, 16, 6);                     // cap
-    j.fillStyle(PAL.player, 1);
-    j.fillRect(3, 7, 16, 4);                     // head
-    j.fillRoundedRect(3, 12, 16, 18, 3);         // torso
-    j.fillRect(5, 27, 6, 5);                     // tucked thigh
-    j.fillRect(12, 27, 6, 5);                    // tucked thigh
-    j.fillRect(5, 31, 6, 3);                     // tucked shin
-    j.fillRect(12, 31, 6, 3);                    // tucked shin
-    j.fillStyle('#6a6053', 1);
-    j.fillRect(1, 20, 6, 12);                    // arm up / forward
-    j.fillStyle(PAL.player, 1);
-    j.fillRect(15, 20, 5, 5);                    // other arm back
-    j.generateTexture('runner-jump', 22, 36);
-    j.destroy();
+    const r = document.createElement('canvas');
+    r.width = 22; r.height = 36; draw(r.getContext('2d'), false);
+    this.textures.addCanvas('runner-run', r);
+
+    const j = document.createElement('canvas');
+    j.width = 22; j.height = 36; draw(j.getContext('2d'), true);
+    this.textures.addCanvas('runner-jump', j);
 
     // Spawn feet ON TOP of the plank surface (plank top = groundY - plankHeight/2).
     const spawnY = TUNE.groundY - TUNE.plankHeight / 2 - 18 - 2;

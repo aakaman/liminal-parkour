@@ -29,7 +29,7 @@ export class GameScene extends Phaser.Scene {
     this.hud = this.add.text(16, 12, '0 m', {
       fontFamily: 'monospace', fontSize: '24px', color: '#2a2724',
     }).setDepth(20);
-    this.add.text(TUNE.width / 2, 22, 'SPACE = jump   ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·   press twice in air = double-jump', {
+        this.add.text(TUNE.width / 2, 22, 'SPACE to jump - press twice in air for a double-jump', {
       fontFamily: 'monospace', fontSize: '15px', color: '#4a443c',
     }).setOrigin(0.5, 0).setDepth(20);
 
@@ -64,26 +64,37 @@ export class GameScene extends Phaser.Scene {
 
   addPlank(x, y, len) {
     const g = this.add.graphics();
-    const pTop = PAL.plankTop;
-    const pStripe = PAL.plankTop2;
-    const pFront = PAL.plankFront;
-    const pEdge = PAL.plankEdge;
-    // Top face (light wood) with a plank stripe and a drawn front/side face,
-    // plus a soft shadow cast by the overhang onto the world below.
-    g.fillStyle(pTop, 1);
-    g.fillRect(0, 0, len, TUNE.plankHeight);
-    g.fillStyle(pStripe, 1);
-    g.fillRect(0, 5, len, 4);
-    g.fillStyle(pFront, 1);
-    g.fillRect(0, TUNE.plankHeight - 10, len, 10);
-    g.fillStyle(pEdge, 1);
-    g.fillRect(0, TUNE.plankHeight - 3, len, 3);
-    // side grain ticks
-    g.lineStyle(1, pEdge, 0.35);
-    for (let i = 0; i < len; i += 18) {
-      g.beginPath(); g.moveTo(i, TUNE.plankHeight - 8); g.lineTo(i + 8, TUNE.plankHeight - 4); g.strokePath();
+    const H = TUNE.plankHeight;
+    const P = PAL;
+    // --- Draw a horizontal wooden LOG ---
+    // Backdrop: bark body.
+    g.fillStyle(P.plankWhole, 1);
+    g.fillRoundedRect(0, 3, len, H - 4, 4);
+    g.fillStyle(P.plankWholeDark, 1);
+    g.fillRect(0, 3, len, (H - 4) / 2);          // subtle top-to-bottom shade
+    // Grain arcs across the bark (log-ring feel), lighter strokes.
+    g.lineStyle(1, P.plankRing, 0.5);
+    for (let i = 4; i < len; i += 12) {
+      g.beginPath();
+      g.arc(i, 3 + (H - 4) / 2, (H - 4) / 2 + 2, Math.PI, 0, false);
+      g.strokePath();
     }
-    g.generateTexture('plank' + len, len, TUNE.plankHeight);
+    // Bark side ticks near the bottom (rough bark).
+    g.lineStyle(1, P.plankEdge, 0.4);
+    for (let i = 6; i < len; i += 10) {
+      g.beginPath(); g.moveTo(i, H - 7); g.lineTo(i + 5, H - 3); g.strokePath();
+    }
+    // Rounded ends (log cross-section hint) already given by fillRoundedRect.
+    // Bright TOP landing face ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the runner actually stands on this.
+    g.fillStyle(P.plankTop, 1);
+    g.fillRoundedRect(0, 0, len, 8, { tl: 4, tr: 4, bl: 0, br: 0 });
+    g.fillStyle(P.plankTopHi, 0.9);
+    g.fillRect(0, 2, len, 2);                     // highlight line on the top
+    // Soft shadow cast by the log onto whatever is below.
+    g.fillStyle('#2e2418', 0.18);
+    g.fillRect(0, H - 3, len, 3);
+
+    g.generateTexture('plank' + len, len, H);
     g.destroy();
 
     const plank = this.planks.create(x + len / 2, y, 'plank' + len);
@@ -97,23 +108,46 @@ export class GameScene extends Phaser.Scene {
   }
 
   makePlayer() {
-    const g = this.add.graphics();
-    // A small, readable runner: dark figure + accent cap.
-    g.fillStyle(PAL.player, 1);
-    g.fillRoundedRect(3, 12, 16, 19, 3);       // torso
-    g.fillRect(5, 29, 5, 5);                    // leg
-    g.fillRect(12, 29, 5, 5);                   // leg
-    g.fillRect(7, 31, 8, 4);                    // feet
-    g.fillStyle(PAL.playerAccent, 1);
-    g.fillRect(3, 4, 16, 6);                    // cap
-    g.fillStyle(PAL.player, 1);
-    g.fillRect(3, 9, 16, 4);                    // head band
-    g.generateTexture('runner', 22, 36);
-    g.destroy();
+    // Idle/run frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â tall, legs apart (mid stride).
+    const r = this.add.graphics();
+    r.fillStyle(PAL.playerAccent, 1);
+    r.fillRect(3, 2, 16, 6);                     // cap
+    r.fillStyle(PAL.player, 1);
+    r.fillRect(3, 7, 16, 4);                     // head
+    r.fillRoundedRect(3, 12, 16, 18, 3);         // torso
+    r.fillRect(5, 29, 5, 6);                     // rear leg
+    r.fillRect(12, 28, 5, 7);                    // front leg
+    r.fillRect(6, 33, 5, 3);                     // rear foot
+    r.fillRect(12, 33, 6, 3);                    // front foot
+    r.fillStyle('#6a6053', 1);
+    r.fillRect(1, 34, 20, 2);                    // arm swung at side
+    r.generateTexture('runner-run', 22, 36);
+    r.destroy();
+
+    // Jump frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â legs tucked under the body, slightly leaned back.
+    const j = this.add.graphics();
+    j.fillStyle(PAL.playerAccent, 1);
+    j.fillRect(3, 2, 16, 6);                     // cap
+    j.fillStyle(PAL.player, 1);
+    j.fillRect(3, 7, 16, 4);                     // head
+    j.fillRoundedRect(3, 12, 16, 18, 3);         // torso
+    j.fillRect(5, 27, 6, 5);                     // tucked thigh
+    j.fillRect(12, 27, 6, 5);                    // tucked thigh
+    j.fillRect(5, 31, 6, 3);                     // tucked shin
+    j.fillRect(12, 31, 6, 3);                    // tucked shin
+    j.fillStyle('#6a6053', 1);
+    j.fillRect(1, 20, 6, 12);                    // arm up / forward
+    j.fillStyle(PAL.player, 1);
+    j.fillRect(15, 20, 5, 5);                    // other arm back
+    j.generateTexture('runner-jump', 22, 36);
+    j.destroy();
+
     // Spawn feet ON TOP of the plank surface (plank top = groundY - plankHeight/2).
     const spawnY = TUNE.groundY - TUNE.plankHeight / 2 - 18 - 2;
-    this.player = this.physics.add.sprite(TUNE.spawnX, spawnY, 'runner');
+    this.player = this.physics.add.sprite(TUNE.spawnX, spawnY, 'runner-run');
     this.player.setDepth(10);
+    this.player.setScale(1);
+    this._jumpPop = 0;    // small settle timer used by the jump "twitch"
   }
 
   update(time, delta) {
@@ -128,13 +162,18 @@ export class GameScene extends Phaser.Scene {
       if (ground) {
         p.setVelocityY(-TUNE.jumpVelocity);
         this._air = 0;
+        this.startJumpAnim();
       } else if (this._air === 0) {
         p.setVelocityY(-TUNE.doubleJumpVelocity);
         this._air = 1;
+        this.startJumpAnim();
       }
     }
     this._pressHeld = held;
-    if (ground) this._air = 0;
+    if (ground) {
+      this._air = 0;
+      this.endJumpAnim();
+    }
 
     const m = Math.floor(p.x / 40);
     if (m !== this.distance) { this.distance = m; this.hud.setText(m + ' m'); }
@@ -176,6 +215,29 @@ export class GameScene extends Phaser.Scene {
     // Fail when the runner drops below the world.
     if (p.y > TUNE.height + 140) {
       this.scene.restart();
+    }
+
+    // Short-jump squash/stretch pop.
+    this.updateJumpPop(dt);
+  }
+
+  startJumpAnim() {
+    this.player.setTexture('runner-jump');
+    this._jumpPop = 1.0;
+  }
+
+  endJumpAnim() {
+    this.player.setTexture('runner-run');
+    this._jumpPop = 0;
+    this.player.setScale(1, 1);
+  }
+
+  updateJumpPop(dt) {
+    if (this._jumpPop && this._jumpPop !== 0) {
+      const amount = Math.sin(this._jumpPop * Math.PI) * 0.12;
+      this.player.setScale(1 + amount, 1 - amount * 0.6);
+      this._jumpPop -= dt * 6;
+      if (this._jumpPop <= 0) { this._jumpPop = 0; this.player.setScale(1, 1); }
     }
   }
 }

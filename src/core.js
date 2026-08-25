@@ -3,10 +3,13 @@
 export const PAL = {
   skyTop: '#b7ae9f',
   skyBottom: '#dcd5c9',
-  plankTop: '#cfbda6',
-  plankTop2: '#c3b096',      // stripe
-  plankFront: '#9c8b74',
-  plankEdge: '#6f614e',      // deep side / shadow
+  plankTop: '#cfbda6',      // log top face (bright landing surface)
+  plankTopHi: '#e0d3be',     // highlight along the top edge
+  plankWhole: '#b3926f',     // log body (bark / wood)
+  plankWholeDark: '#a58562',   // darker bark tone
+  plankFront: '#8a6f52',     // bark underside / end
+  plankEdge: '#5f4a33',      // deep bark shadow
+  plankRing: '#7a6045',      // grain ring line
   player: '#3a3530',
   playerAccent: '#2f6d8f',   // cap
   hud: '#332f2a',

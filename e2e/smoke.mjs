@@ -9,8 +9,9 @@ const ok = (name, cond, detail) => {
   console.log(`  [${mark}] ${name}${detail ? ' — ' + detail : ''}`);
 };
 const read = (page) => page.evaluate(() => ({
-  x: window.__px, y: window.__py, grounded: window.__grounded,
+  x: Math.round(window.__px), y: Math.round(window.__py), grounded: window.__grounded,
 }));
+const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const server = await preview({ build: { outDir: 'dist' }, preview: { port: PORT, strictPort: true } });
 const browser = await chromium.launch();
@@ -21,34 +22,45 @@ page.on('pageerror', (e) => errors.push(String(e)));
 
 await page.goto(`http://localhost:${PORT}/?canvas=1`, { waitUntil: 'networkidle' });
 
-// Within the safe runway the runner should be grounded and advancing. Sample
-// only once the runner is moving on the base (avoids the boot frame flake).
-await page.waitForFunction(() => window.__px != null && window.__px > 180 && window.__grounded === true, null, { timeout: 4000 });
-const r1 = await read(page);
-await page.waitForTimeout(500);
-const r2 = await read(page);
+// Free-movement game: after boot the runner rests grounded on the starting base.
+await page.waitForFunction(() => window.__px != null && window.__grounded === true, null, { timeout: 4000 });
+await settle(200);
+const r0 = await read(page);          // idle rest point
+await settle(400);
+const rIdle = await read(page);
 
 ok('no js errors', errors.length === 0, errors.join(' | ').slice(0, 300));
-ok('runner is grounded on the runway', r1.grounded === true, `grounded=${r1.grounded}`);
-ok('runner not sinking during runway (y stable near platform)', Math.abs((r2.y ?? 0) - (r1.y ?? 0)) < 30,
-   `y ${r1.y} -> ${r2.y}`);
-ok('runner advances forward', (r2.x ?? 0) > (r1.x ?? 0), `x ${r1.x} -> ${r2.x}`);
+ok('runner rests grounded on the base when idle', rIdle.grounded === true, `grounded=${rIdle.grounded}`);
+ok('runner does not drift/sink while idle', Math.abs(rIdle.y - r0.y) < 5 && Math.abs(rIdle.x - r0.x) < 5,
+   `(${r0.x},${r0.y}) -> (${rIdle.x},${rIdle.y})`);
 
-// Jump test: press Space and confirm y decreases (rises).
-await page.keyboard.down('Space');
-await page.waitForTimeout(70);
-await page.keyboard.up('Space');
-await page.waitForTimeout(120);
-const r3 = await read(page);
-ok('jump lifts the runner', (r3.y ?? Infinity) < (r2.y ?? 0), `y ${r2.y} -> ${r3.y}`);
-ok('jump state alive (x still advancing)', (r3.x ?? 0) > (r2.x ?? 0), `x ${r2.x} -> ${r3.x}`);
+// Move right with D, then left with A.
+await page.keyboard.down('d');
+await page.waitForTimeout(400);
+const rRight = await read(page);
+await page.keyboard.up('d');
+ok('moves right on D', rRight.x > rIdle.x, `x ${rIdle.x} -> ${rRight.x}`);
 
-// The first key press is also what unlocks audio, so the wind should be live.
+await page.keyboard.down('a');
+await page.waitForTimeout(400);
+const rLeft = await read(page);
+await page.keyboard.up('a');
+ok('moves left on A', rLeft.x < rRight.x, `x ${rRight.x} -> ${rLeft.x}`);
+
+// Climb upward with W (smaller y = higher).
+await page.keyboard.down('w');
+await page.waitForTimeout(350);
+const rUp = await read(page);
+await page.keyboard.up('w');
+ok('rises on W', rUp.y < rIdle.y, `y ${rIdle.y} -> ${rUp.y}`);
+
+// A later key press still unlocks audio, so the wind should be live.
 const wind = await page.evaluate(() => window.__wind ?? {});
-ok('wind ambience active after first input', wind.on === true, JSON.stringify(wind));
+ok('wind ambience active after input', wind.on === true, JSON.stringify(wind));
 
 await page.screenshot({ path: 'dist/e2e-' + Date.now() + '.png' });
-console.log('  state: r1', JSON.stringify(r1), ' r2', JSON.stringify(r2), ' r3', JSON.stringify(r3));
+console.log('  idle', JSON.stringify(rIdle), 'right', JSON.stringify(rRight),
+            'left', JSON.stringify(rLeft), 'up', JSON.stringify(rUp));
 
 await browser.close();
 await server.close();

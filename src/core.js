@@ -19,21 +19,20 @@ export const TUNE = {
   width: 960,
   height: 540,
   gravity: 1500,
-  runSpeed: 320,
-  jumpVelocity: 640,
-  doubleJumpVelocity: 560,
+  runSpeed: 220,          // max horizontal speed (free WASD/arrow movement)
+  climbSpeed: 200,        // max vertical speed (up/down movement)
   maxFallSpeed: 1000,
-  logWidth: 260,        // long cap = generous landing target (kept vertical by tall body)
+  logWidth: 32,         // cap a bit wider than the player (player sprite is 22px)
   logStartW: 720,
-  logHMin: 140,
-  logHMax: 240,
-  startTop: 417,
-  logTopHigh: 180,      // highest a cap climbs to (leaves headroom above)
-  logTopMax: 440,       // lowest a cap settles at
-  climbStep: 50,        // max UP step between caps (<= single-jump rise)
-  descendStep: 14,      // max DOWN step (small so a run-off always lands)
-  gapMin: 12,
-  gapMax: 28,
+  logHMin: 460,         // very long logs -> you can't see the bottom of them
+  logHMax: 620,
+  startTop: 415,
+  logTopHigh: 330,      // highest a cap climbs to (keeps the skyline in view)
+  logTopMax: 430,       // lowest a cap settles at
+  climbStep: 24,        // gentle UP step (reliable to hop)
+  descendStep: 14,      // gentle DOWN step (landable; rolling relief)
+  gapMin: 40,           // always reachable in one hop (spacing <= jump reach)
+  gapMax: 55,
   spawnX: 120,
   groundY: 430,
 };

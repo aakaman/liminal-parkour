@@ -25,18 +25,15 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, false, 0.1, 0.1);
     this.cameras.main.setDeadzone(140, 80);
 
-    this.keys = this.input.keyboard.addKeys('SPACE,W,UP');
+    this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,UP,DOWN,W,A,S,D');
 
     this.distance = 0;
     this.hud = this.add.text(16, 12, '0 m', {
       fontFamily: 'monospace', fontSize: '24px', color: '#2a2724',
     }).setDepth(20);
-        this.add.text(TUNE.width / 2, 22, 'SPACE to jump - press twice in air for a double-jump', {
+        this.add.text(TUNE.width / 2, 22, 'WASD / arrows - move freely across the logs', {
       fontFamily: 'monospace', fontSize: '15px', color: '#4a443c',
     }).setOrigin(0.5, 0).setDepth(20);
-
-    this._pressHeld = false;
-    this._air = 0;
 
     // Ambient wind: procedural, plays from the first input (autoplay rules).
     this.wind = new WindAmbience(this.sound ? this.sound.context : null);
@@ -293,37 +290,31 @@ export class GameScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(TUNE.spawnX, spawnY, 'runner-run');
     this.player.setDepth(10);
     this.player.setScale(1);
-    this._jumpPop = 0;    // small settle timer used by the jump "twitch"
+    this.player.body.collideWorldBounds = true;   // stay inside the play area
   }
 
-  update(time, delta) {
-    const dt = Math.min(delta, 50) / 1000;
+  update(time) {
     const p = this.player;
 
-    p.setVelocityX(TUNE.runSpeed);
     this.fillSkyline();
 
-    const held = this.keys.SPACE.isDown || this.keys.W.isDown || this.keys.UP.isDown;
-    const ground = p.body.blocked.down || p.body.touching.down;
-    if (held && !this._pressHeld) {
-      if (ground) {
-        p.setVelocityY(-TUNE.jumpVelocity);
-        this._air = 0;
-        this.startJumpAnim();
-      } else if (this._air === 0) {
-        p.setVelocityY(-TUNE.doubleJumpVelocity);
-        this._air = 1;
-        this.startJumpAnim();
-      }
-    }
-    this._pressHeld = held;
-    if (ground) {
-      this._air = 0;
-      this.endJumpAnim();
-    }
+    // Free movement: WASD / arrow keys set velocity in both axes.
+    // Horizontal: left/right. Vertical: up (hold to climb), down (hold to sink).
+    const moveLeft  = this.keys.LEFT.isDown || this.keys.A.isDown;
+    const moveRight = this.keys.RIGHT.isDown || this.keys.D.isDown;
+    const moveUp    = this.keys.UP.isDown  || this.keys.W.isDown;
+    const moveDown  = this.keys.DOWN.isDown|| this.keys.S.isDown;
+    p.setVelocityX((moveRight ? 1 : 0) * TUNE.runSpeed + (moveLeft ? -1 : 0) * TUNE.runSpeed);
+    if (moveUp) p.setVelocityY(-TUNE.climbSpeed);
+    else if (moveDown) p.setVelocityY(TUNE.climbSpeed);
+    // No vertical input: leave velocity.y alone so gravity pulls the runner
+    // down onto a cap (it rests there). Flip the run/jump frame on movement.
+    this.applyRunFrame();
 
-    const m = Math.floor(p.x / 40);
-    if (m !== this.distance) { this.distance = m; this.hud.setText(m + ' m'); }
+    const ground = p.body.blocked.down || p.body.touching.down;
+    // Track furthest point reached, not oscillating position.
+    this.distance = Math.max(this.distance || 0, Math.floor(p.x / 40));
+    this.hud.setText(this.distance + ' m');
 
     // Debug state for headless e2e.
     if (typeof window !== 'undefined') {
@@ -379,28 +370,14 @@ export class GameScene extends Phaser.Scene {
     // Wind reacts to how fast the runner is cutting through the air.
     this.wind.update(p.body.velocity.x, p.body.velocity.y);
 
-    // Short-jump squash/stretch pop.
-    this.updateJumpPop(dt);
   }
 
-  startJumpAnim() {
-    this.player.setTexture('runner-jump');
-    this._jumpPop = 1.0;
-  }
-
-  endJumpAnim() {
-    this.player.setTexture('runner-run');
-    this._jumpPop = 0;
-    this.player.setScale(1, 1);
-  }
-
-  updateJumpPop(dt) {
-    if (this._jumpPop && this._jumpPop !== 0) {
-      const amount = Math.sin(this._jumpPop * Math.PI) * 0.12;
-      this.player.setScale(1 + amount, 1 - amount * 0.6);
-      this._jumpPop -= dt * 6;
-      if (this._jumpPop <= 0) { this._jumpPop = 0; this.player.setScale(1, 1); }
-    }
+  // Keep the runner in its run frame and facing the way it's moving.
+  applyRunFrame() {
+    const p = this.player;
+    if (p.texture && p.texture.key !== 'runner-run') p.setTexture('runner-run');
+    p.setFlipX(p.body.velocity.x < -1);
+    p.setScale(1, 1);
   }
 }
 

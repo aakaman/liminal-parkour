@@ -1,8 +1,9 @@
 # Liminal Parkour — gameplay-first prototype
 
-A forward-only parkour game across endless wooden planks. The runner moves
-forward automatically; the only input is jump. Time your jumps to cross the
-gaps between planks. Fall through a gap and the run restarts.
+A forward-only parkour game up endless vertical wooden logs. The runner moves
+forward automatically; the only input is jump. Logs climb higher and give way
+to you frequently, so time your jumps to hop from one log top to the next as
+the run ascends. Fall and the run restarts.
 
 Built with Phaser 3 + Vite. Currently gameplay-first (simple, deliberate
 grayish-brown visuals; the liminal atmosphere comes in a later pass).
@@ -21,6 +22,13 @@ policy blocks `npm.ps1`.
 
 - `SPACE` / `W` / `UP` — jump (press again in the air for a double jump)
 - The runner auto-runs forward.
+
+## Audio
+
+An ambient wind sound plays while you run — procedurally generated at runtime,
+so there are no audio files to ship. Browsers only allow sound after the first
+interaction, so it starts on your first jump (or click). The wind swells as the
+runner falls faster, making long dives rush louder.
 
 ## Self-verification (no browser needed by hand)
 

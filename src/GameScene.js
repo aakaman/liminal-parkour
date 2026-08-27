@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TUNE, PAL } from './core.js';
+import { WindAmbience } from './wind.js';
 
 // Gameplay-first: the runner auto-runs forward; the only input is jump
 // (Space/W/Up, with a double jump in air). Tiny two-tone planks separated by
@@ -36,6 +37,14 @@ export class GameScene extends Phaser.Scene {
 
     this._pressHeld = false;
     this._air = 0;
+
+    // Ambient wind: procedural, plays from the first input (autoplay rules).
+    this.wind = new WindAmbience(this.sound ? this.sound.context : null);
+    this.wind.start();
+    const unlockWind = () => this.wind.start();
+    this.input.keyboard.once('keydown', unlockWind);
+    this.input.once('pointerdown', unlockWind);
+    this.events.once('shutdown', () => this.wind.stop());
   }
 
   makeSkyline() {
@@ -111,7 +120,7 @@ export class GameScene extends Phaser.Scene {
     const hWin = Math.floor((h / 2 - 14) * 0.55);
     drawWindow(ctx, 14, h / 2 + 8, wWin, hWin, wallDark);
 
-    this.textures.addCanvas('bldg-house', c);
+    if (!this.textures.exists('bldg-house')) this.textures.addCanvas('bldg-house', c);
   }
 
   spawnHouse(x) {
@@ -148,16 +157,18 @@ export class GameScene extends Phaser.Scene {
 
   makePlanks() {
     this.planks = this.physics.add.staticGroup();
-    // Long safe runway so the first gap is not immediate.
-    this.addPlank(-240, TUNE.groundY, 880);
-    let x = 640;
-    let y = TUNE.groundY;
-    for (let i = 0; i < 60; i++) {
-      const len = rand(TUNE.plankMinLen, TUNE.plankMaxLen);
-      const gap = rand(TUNE.gapMin, TUNE.gapMax);
-      if (i % 4 === 2) y += rand(-40, 40);
-      this.addPlank(x, y, len);
-      x += len + gap;
+    // A wide, flat starting base so the runner spawns grounded before climbing.
+    let x = -80;
+    let topY = TUNE.startTop;
+    this.addPlank(x, topY, TUNE.logHMin, TUNE.logStartW);
+    x += TUNE.logStartW;
+    // Then tall vertical logs, ascending as you hop from top to top.
+    // They repeat more frequently than the old flat planks (tighter gaps).
+    for (let i = 0; i < 80; i++) {
+      topY = nextTop(topY);
+      const h = rand(TUNE.logHMin, TUNE.logHMax);
+      this.addPlank(x, topY, h);
+      x += TUNE.logWidth + rand(TUNE.gapMin, TUNE.gapMax);
     }
   }
 
@@ -170,53 +181,52 @@ export class GameScene extends Phaser.Scene {
     grad.addColorStop(1, PAL.skyBottom);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, TUNE.width, TUNE.height);
-    this.textures.addCanvas('sky', c);
+    if (!this.textures.exists('sky')) this.textures.addCanvas('sky', c);
     this.add.image(TUNE.width / 2, TUNE.height / 2, 'sky').setScrollFactor(0).setDepth(-50);
   }
 
-  addPlank(x, y, len) {
+  // A vertical wooden log with a bright top cap the runner lands on.
+  // x is the log's left edge, topY its top (cap) elevation, h its height,
+  // w its horizontal thickness (the cap width).
+  addPlank(x, topY, h, w = TUNE.logWidth) {
     const c = document.createElement('canvas');
-    c.width = len; c.height = TUNE.plankHeight;
+    c.width = w; c.height = h;
     const ctx = c.getContext('2d');
-    const H = TUNE.plankHeight;
     const P = PAL;
-    // --- Draw a horizontal wooden LOG (brown bark body + bright top face) ---
-    // Wood body: bark / wood block.
+    // Bark / wood body filling the log.
     ctx.fillStyle = P.plankWhole;
-    ctx.fillRect(0, 3, len, H - 4);
-    // Top-to-bottom shading on the body (darker near the top).
+    ctx.fillRect(2, 4, w - 4, h - 4);
     ctx.fillStyle = P.plankWholeDark;
-    ctx.fillRect(0, 3, len, (H - 4) / 2);
-    // Vertical wood-grain lines across the body.
+    ctx.fillRect(2, 4, 2, h - 4);                    // dark edge shading
+    // Horizontal tree rings (grain running down the log).
     ctx.strokeStyle = P.plankRing;
     ctx.globalAlpha = 0.5;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let i = 6; i < len; i += 12) { ctx.moveTo(i, 3); ctx.lineTo(i, H - 1); }
+    for (let i = 7; i < h; i += 14) { ctx.moveTo(2, i); ctx.lineTo(w - 2, i); }
     ctx.stroke();
-    // Rough-bark edge ticks near the bottom.
-    ctx.strokeStyle = P.plankEdge;
+    // Rough-bark ticks along both sides.
+    ctx.fillStyle = P.plankEdge;
     ctx.globalAlpha = 0.4;
-    ctx.beginPath();
-    for (let i = 6; i < len; i += 10) { ctx.moveTo(i, H - 7); ctx.lineTo(i + 5, H - 3); }
-    ctx.stroke();
+    for (let i = 7; i < h; i += 12) { ctx.fillRect(0, i, 2, 4); ctx.fillRect(w - 2, i, 2, 4); }
     ctx.globalAlpha = 1;
-    // Bright TOP landing face - the runner stands on this.
+    // Bright TOP landing cap - the runner stands on this.
     ctx.fillStyle = P.plankTop;
-    ctx.fillRect(0, 0, len, 7);
+    ctx.fillRect(0, 0, w, 7);
     ctx.fillStyle = P.plankTopHi;
     ctx.globalAlpha = 0.9;
-    ctx.fillRect(0, 2, len, 2);                     // highlight line on the top
+    ctx.fillRect(0, 2, w, 2);                        // highlight on the cap
     ctx.globalAlpha = 1;
-    // Soft shadow cast by the log onto whatever is below.
+    // Soft shadow along the bottom edge.
     ctx.fillStyle = '#2e2418';
     ctx.globalAlpha = 0.18;
-    ctx.fillRect(0, H - 3, len, 3);
+    ctx.fillRect(0, h - 3, w, 3);
     ctx.globalAlpha = 1;
 
-    this.textures.addCanvas('plank' + len, c);
+    const key = 'plankv' + w + '_' + h;
+    if (!this.textures.exists(key)) this.textures.addCanvas(key, c);
 
-    const plank = this.planks.create(x + len / 2, y, 'plank' + len);
+    const plank = this.planks.create(x + w / 2, topY + h / 2, key);
     const body = plank.body;
     body.allowGravity = false;
     body.checkCollision.up = true;   // one-way top only
@@ -272,14 +282,14 @@ export class GameScene extends Phaser.Scene {
 
     const r = document.createElement('canvas');
     r.width = 22; r.height = 36; draw(r.getContext('2d'), false);
-    this.textures.addCanvas('runner-run', r);
+    if (!this.textures.exists('runner-run')) this.textures.addCanvas('runner-run', r);
 
     const j = document.createElement('canvas');
     j.width = 22; j.height = 36; draw(j.getContext('2d'), true);
-    this.textures.addCanvas('runner-jump', j);
+    if (!this.textures.exists('runner-jump')) this.textures.addCanvas('runner-jump', j);
 
-    // Spawn feet ON TOP of the plank surface (plank top = groundY - plankHeight/2).
-    const spawnY = TUNE.groundY - TUNE.plankHeight / 2 - 18 - 2;
+    // Spawn feet ON TOP of the starting base's cap.
+    const spawnY = TUNE.startTop - 18 - 2;
     this.player = this.physics.add.sprite(TUNE.spawnX, spawnY, 'runner-run');
     this.player.setDepth(10);
     this.player.setScale(1);
@@ -335,24 +345,39 @@ export class GameScene extends Phaser.Scene {
         }
       }
       window.__plankSpans = spans;
-      // Next gap ahead of the runner: [gapStart, gapEnd]. -1 if none.
-      let ng = null;
-      if (spans.length >= 2) {
-        for (let i = 0; i < spans.length - 1; i++) {
-          const a1 = spans[i][1], b0 = spans[i + 1][0];
-          if (b0 - a1 > 40) {                      // a real gap
-            if (b0 > p.x) { ng = [a1, b0]; break; } // first gap ahead
+      // Next log cap ahead: [x0, x1]; higher = its top is above the runner's
+      // feet (needs a jump). null if none ahead.
+      let cap = null;
+      let capHigher = false;
+      if (this.planks.children) {
+        const entries = this.planks.children.entries;
+        for (const pl of entries) {
+          if (!pl || !pl.body) continue;
+          const ptop = pl.y - pl.displayHeight / 2;
+          const x0 = pl.x - pl.displayWidth / 2;
+          if (x0 > p.x + 6) {
+            cap = [x0, x0 + pl.displayWidth];
+            capHigher = ptop < p.y - 12;
+            break;
           }
         }
       }
-      window.__nextGap = ng;
+      window.__nextCap = cap;
+      window.__nextCapHigher = capHigher;
       window.__runnerBody = { x: p.body.x, y: p.body.y, w: p.body.width, h: p.body.height };
+      window.__wind = {
+        on: this.wind.isActive(),
+        ctxState: this.wind.ctx ? this.wind.ctx.state : 'none',
+      };
     }
 
     // Fail when the runner drops below the world.
     if (p.y > TUNE.height + 140) {
       this.scene.restart();
     }
+
+    // Wind reacts to how fast the runner is cutting through the air.
+    this.wind.update(p.body.velocity.x, p.body.velocity.y);
 
     // Short-jump squash/stretch pop.
     this.updateJumpPop(dt);
@@ -402,3 +427,15 @@ function shade(hex, mult) {
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
+
+// Next log-top elevation: mainly climb upward (within the reachable band),
+// stepping back down a little once it gets too high so the run stays bounded.
+function nextTop(prev) {
+  // Smaller y = higher on screen. Mostly climb upward; allow only small
+  // descents so a run-off always lands on the close next cap. Stay in band.
+  const up = Math.random() < 0.7;
+  const n = up
+    ? prev - TUNE.climbStep * (0.3 + Math.random() * 0.8)
+    : prev + TUNE.descendStep * Math.random();
+  return Math.max(TUNE.logTopHigh, Math.min(TUNE.logTopMax, n));
+}

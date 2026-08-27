@@ -21,8 +21,9 @@ page.on('pageerror', (e) => errors.push(String(e)));
 
 await page.goto(`http://localhost:${PORT}/?canvas=1`, { waitUntil: 'networkidle' });
 
-// Within the safe runway the runner should be grounded, not sinking.
-await page.waitForTimeout(700);
+// Within the safe runway the runner should be grounded and advancing. Sample
+// only once the runner is moving on the base (avoids the boot frame flake).
+await page.waitForFunction(() => window.__px != null && window.__px > 180 && window.__grounded === true, null, { timeout: 4000 });
 const r1 = await read(page);
 await page.waitForTimeout(500);
 const r2 = await read(page);
@@ -41,6 +42,10 @@ await page.waitForTimeout(120);
 const r3 = await read(page);
 ok('jump lifts the runner', (r3.y ?? Infinity) < (r2.y ?? 0), `y ${r2.y} -> ${r3.y}`);
 ok('jump state alive (x still advancing)', (r3.x ?? 0) > (r2.x ?? 0), `x ${r2.x} -> ${r3.x}`);
+
+// The first key press is also what unlocks audio, so the wind should be live.
+const wind = await page.evaluate(() => window.__wind ?? {});
+ok('wind ambience active after first input', wind.on === true, JSON.stringify(wind));
 
 await page.screenshot({ path: 'dist/e2e-' + Date.now() + '.png' });
 console.log('  state: r1', JSON.stringify(r1), ' r2', JSON.stringify(r2), ' r3', JSON.stringify(r3));

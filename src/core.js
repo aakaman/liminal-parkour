@@ -23,11 +23,17 @@ export const TUNE = {
   jumpVelocity: 640,
   doubleJumpVelocity: 560,
   maxFallSpeed: 1000,
-  plankHeight: 26,
-  plankMinLen: 160,
-  plankMaxLen: 320,
-  gapMin: 70,
-  gapMax: 118,
+  logWidth: 260,        // long cap = generous landing target (kept vertical by tall body)
+  logStartW: 720,
+  logHMin: 140,
+  logHMax: 240,
+  startTop: 417,
+  logTopHigh: 180,      // highest a cap climbs to (leaves headroom above)
+  logTopMax: 440,       // lowest a cap settles at
+  climbStep: 50,        // max UP step between caps (<= single-jump rise)
+  descendStep: 14,      // max DOWN step (small so a run-off always lands)
+  gapMin: 12,
+  gapMax: 28,
   spawnX: 120,
   groundY: 430,
 };

@@ -9,7 +9,10 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push(String(e)));
 await page.goto('http://localhost:5197/?canvas=1', { waitUntil: 'networkidle' });
 
-const read = () => page.evaluate(() => ({ x: window.__px, y: window.__py, g: window.__grounded, ng: window.__nextGap }));
+const read = () => page.evaluate(() => ({
+  x: window.__px, y: window.__py, g: window.__grounded,
+  cap: window.__nextCap, higher: window.__nextCapHigher,
+}));
 
 let jumps = 0, landings = 0, bestX = 0, prevG = true, anyJumped = false;
 
@@ -20,11 +23,11 @@ for (let frame = 0; frame < 300; frame++) {
   if (s.g === true && prevG === false) landings++;
   prevG = s.g === true;
 
-  if (s.ng) {
-    const [gapStart, gapEnd] = s.ng;
+  if (s.cap) {
+    const gapStart = s.cap[0];
     const distToGap = gapStart - s.x;
     const grounded = s.g === true;
-    const inLead = distToGap > 30 && distToGap < 90;
+    const inLead = distToGap > 26 && distToGap < 95;
     if (grounded && inLead === true) {
       await page.keyboard.down('Space');
       await page.waitForTimeout(30);

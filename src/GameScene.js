@@ -11,7 +11,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    this.physics.world.setBounds(0, 0, 400000, TUNE.height + 200);
+    this.physics.world.setBounds(0, 0, 400000, TUNE.height + TUNE.worldDeep);
     this.makeBackground();
     this.makeSkyline();
     this.cameras.main.setBackgroundColor(PAL.skyBottom);
@@ -157,18 +157,33 @@ export class GameScene extends Phaser.Scene {
 
   makePlanks() {
     this.planks = this.physics.add.staticGroup();
+    this._plankList = [];                 // ordered list of spawned logs (for cleanup)
+    this._plankX = -80;
+    this._plankTopY = TUNE.startTop;
     // A wide, flat starting base so the runner spawns grounded before climbing.
-    let x = -80;
-    let topY = TUNE.startTop;
-    this.addPlank(x, topY, TUNE.logHMin, TUNE.logStartW);
-    x += TUNE.logStartW;
-    // Then tall vertical logs, ascending as you hop from top to top.
-    // They repeat more frequently than the old flat planks (tighter gaps).
-    for (let i = 0; i < 80; i++) {
-      topY = nextTop(topY);
+    const base = this.addPlank(-80, TUNE.startTop, TUNE.logHMin, TUNE.logStartW);
+    this._plankList.push({ obj: base, x1: -80 + TUNE.logStartW });
+    this._plankX = -80 + TUNE.logStartW;
+    this.fillPlanks();
+  }
+
+  // Keep tower logs endlessly: spawn more ahead of the runner as they advance,
+  // and drop logs that are far behind to keep memory bounded. Mirrors the
+  // skyline house fill so logs never simply run out.
+  fillPlanks() {
+    const aheadPx = this.player ? this.player.x + TUNE.width * 1.6 + 300 : TUNE.width * 2;
+    while (this._plankX < aheadPx) {
+      this._plankTopY = nextTop(this._plankTopY);
       const h = rand(TUNE.logHMin, TUNE.logHMax);
-      this.addPlank(x, topY, h);
-      x += TUNE.logWidth + rand(TUNE.gapMin, TUNE.gapMax);
+      const pl = this.addPlank(this._plankX, this._plankTopY, h);
+      this._plankList.push({ obj: pl, x1: this._plankX + TUNE.logWidth });
+      this._plankX += TUNE.logWidth + rand(TUNE.gapMin, TUNE.gapMax);
+    }
+    const keepBehind = TUNE.width * 2;     // keep ~2 screens behind the runner
+    const pX = this.player ? this.player.x : 0;
+    while (this._plankList.length && this._plankList[0].x1 < pX - keepBehind) {
+      this._plankList[0].obj.destroy();
+      this._plankList.shift();
     }
   }
 
@@ -386,6 +401,7 @@ export class GameScene extends Phaser.Scene {
     const p = this.player;
 
     this.fillSkyline();
+    this.fillPlanks();
     this.updateSmoke(delta);
 
     // Free movement: WASD / arrow keys set velocity in both axes.
@@ -453,7 +469,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Fail when the runner drops below the world.
-    if (p.y > TUNE.height + 140) {
+    // Fall deeper before resetting (past the bottom of the view and through
+    // the fog) — the longer plunge shows off the smoke before respawning.
+    if (p.y > TUNE.height + TUNE.worldDeep - TUNE.resetMargin) {
       this.scene.restart();
     }
 

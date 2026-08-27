@@ -22,6 +22,8 @@ export const TUNE = {
   runSpeed: 220,          // max horizontal speed (free WASD/arrow movement)
   climbSpeed: 200,        // max vertical speed (up/down movement)
   maxFallSpeed: 1000,
+  worldDeep: 720,         // extra play-area depth below the view for falling deep
+  resetMargin: 120,       // reset this far before the hard bottom when you fall
   logWidth: 32,         // cap a bit wider than the player (player sprite is 22px)
   logStartW: 720,
   logHMin: 460,         // very long logs -> you can't see the bottom of them

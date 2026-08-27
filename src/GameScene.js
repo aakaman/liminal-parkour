@@ -42,20 +42,26 @@ export class GameScene extends Phaser.Scene {
     // A unison row of identical two-floor family houses, all exactly the
     // same size and color, repeating into the distance. The eerie uniformity
     // gives the scene a liminal, "endless suburb" feeling.
-    this._bldgN = 0;
-    const count = 24;
+    // A single shared texture is reused for every house, and new houses are
+    // spawned on demand as the runner advances so they never run out.
     const w = 180;
     const h = 150;
-    const gap = 160;
     const scheme = { wall: '#d7c6a8', roof: '#8a6a52' };
-    let x = -700;
-    for (let i = 0; i < count; i++) {
-      this.addBuilding(x, w, h, scheme);
-      x += w + gap;
-    }
+    this._houseW = w;
+    this._houseH = h;
+    this._houseStep = w + 160;                 // house + gap spacing
+    this._skyStartX = -700;
+    this._nextHouseX = this._skyStartX;
+    this.houses = [];
+
+    // Build the one shared house texture.
+    this.makeHouseTexture(scheme, w, h);
+
+    // Seed the first houses so the view is never empty at spawn.
+    this.fillSkyline();
   }
 
-  addBuilding(x, w, h, scheme) {
+  makeHouseTexture(scheme, w, h) {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
@@ -105,14 +111,40 @@ export class GameScene extends Phaser.Scene {
     const hWin = Math.floor((h / 2 - 14) * 0.55);
     drawWindow(ctx, 14, h / 2 + 8, wWin, hWin, wallDark);
 
-    const key = 'bldg' + this._bldgN++;
-    this.textures.addCanvas(key, c);
-    const img = this.add.image(x + w / 2, TUNE.groundY - h / 2, key);
+    this.textures.addCanvas('bldg-house', c);
+  }
+
+  spawnHouse(x) {
+    const img = this.add.image(x + this._houseW / 2, TUNE.groundY - this._houseH / 2, 'bldg-house');
     img.setScrollFactor(0.7, 1);
     img.setDepth(-40);
+    this.houses.push(img);
     return img;
   }
 
+  // Spawn enough houses to always fill the visible view to the right,
+  // and drop houses that have scrolled well off to the left of the view.
+  // Houses use a parallax scrollFactor of 0.7, so their on-screen position is
+  // (worldX - scrollX * 0.7). All bounds here compare in that parallax space.
+  fillSkyline() {
+    const PARALLAX = 0.7;
+    const hs = this.cameras.main.scrollX * PARALLAX;   // effective house-scroll
+    const ahead = TUNE.width * 1.6;                    // fill ~1.6 screens ahead
+    while (this._nextHouseX - hs < ahead) {
+      this.spawnHouse(this._nextHouseX);
+      this._nextHouseX += this._houseStep;
+    }
+    const keepBehind = TUNE.width * 0.5;               // a half screen off-left
+    while (this.houses.length) {
+      const h0 = this.houses[0];
+      if (h0.x + this._houseW - hs < -keepBehind) {
+        h0.destroy();
+        this.houses.shift();
+      } else {
+        break;
+      }
+    }
+  }
 
   makePlanks() {
     this.planks = this.physics.add.staticGroup();
@@ -259,6 +291,7 @@ export class GameScene extends Phaser.Scene {
     const p = this.player;
 
     p.setVelocityX(TUNE.runSpeed);
+    this.fillSkyline();
 
     const held = this.keys.SPACE.isDown || this.keys.W.isDown || this.keys.UP.isDown;
     const ground = p.body.blocked.down || p.body.touching.down;

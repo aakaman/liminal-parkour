@@ -193,7 +193,7 @@ export class GameScene extends Phaser.Scene {
   makeSmoke() {
     this.makeSmokeTexture();
     this.smokePuffs = [];
-    const COUNT = 26;
+    const COUNT = 40;
     for (let i = 0; i < COUNT; i++) {
       const sp = this.add.image(
         (i / COUNT) * TUNE.width + rand(-40, 40),
@@ -233,20 +233,29 @@ export class GameScene extends Phaser.Scene {
   updateSmoke(delta) {
     if (!this.smokePuffs) return;
     const dt = Math.min(delta, 50);
+    // How low the runner is: sy = screen y of the runner (0 = top, ~540 = bottom).
+    // The closer the runner is to the bottom, the denser and brighter the fog.
+    const sy = this.player.y - this.cameras.main.scrollY;
+    const lowFactor = Math.max(0, Math.min(1, (sy - 200) / 170));
     for (const p of this.smokePuffs) {
       p.life += dt;
       // Fade in quickly, drift up and sideways, then fade out as it ages.
+      // Base fog is always there; sinking lowers the base, thickens, and
+      // also lets puffs sit higher toward the runner.
       const IN = 900;                       // ms to reach full colour
       const t = p.life / p.maxLife;
-      let a = Math.min(1, p.life / IN) * 0.34 * (1 - t * t);
+      const maxA = 0.28 + 0.5 * lowFactor;  // faint up high, thick down low
+      let a = Math.min(1, p.life / IN) * maxA * (1 - t * t);
       if (a <= 0.01) a = 0;
       p.sp.setAlpha(a);
-      p.sp.setScale(0.5 + p.grow * t);
+      p.sp.setScale(0.5 + (p.grow + lowFactor * 0.5) * t);
       p.sp.x += p.vx * (dt / 1000);
-      p.sp.y += p.vy * (dt / 1000);
+      p.sp.y += (p.vy - lowFactor * 14) * (dt / 1000);
       // Respawn once it has dispersed (aged out or drifted above view).
       if (p.life >= p.maxLife || p.sp.y < -80) this.resetPuff(p, false);
     }
+    // Expose for headless checks.
+    if (typeof window !== 'undefined') window.__smokeAmount = lowFactor;
   }
 
   makeBackground() {

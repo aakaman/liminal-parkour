@@ -17,23 +17,31 @@ const read = () => page.evaluate(() => ({
 await page.waitForFunction(() => window.__px != null && window.__grounded === true, null, { timeout: 5000 });
 await page.waitForTimeout(200);
 
+// Give the canvas keyboard focus so the first keypress reliably registers
+// (a common flake in headless Chromium).
+await page.evaluate(() => { const cv = document.querySelector('canvas'); if (cv) cv.focus(); });
+
 // Free-movement auto-player: hold up+right to glide over the logs.
-// Move right (D) and climb (W). First confirm the runner actually starts
-// moving before counting, retrying the press if the frame didn't take it.
+// Move right (D) and climb (W). Wait until the runner is actually moving
+// before counting frames, retrying the input if it didn't take.
 async function press(key, ms) {
   await page.keyboard.down(key);
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 }
-await page.keyboard.down('d');
-await page.keyboard.down('w');
-const start = await read();
-// Ensure input registered; if x did not advance after a moment, re-press.
-for (let tries = 0; tries < 6; tries++) {
+async function holdBoth() {
+  await page.keyboard.down('d');
+  await page.keyboard.down('w');
+}
+await holdBoth();
+// Poll until the runner has clearly left spawn (moved right or climbed),
+// re-pressing the keys if the first dispatch was swallowed.
+const spawnX = (await read()).x;
+let started = false;
+for (let tries = 0; tries < 10 && !started; tries++) {
   const s = await read();
-  if (s.x > start.x + 3 || s.x < start.x) break;   // moved or climbed -> alive
-  await press('d', 40);
-  await press('w', 40);
+  if (s.x - spawnX > 30 || s.y < 320) started = true;   // moved right or climbed
+  if (!started) { await page.keyboard.up('d'); await page.keyboard.up('w'); await holdBoth(); }
   await page.waitForTimeout(120);
 }
 

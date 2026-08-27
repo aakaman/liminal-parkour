@@ -22,6 +22,9 @@ export class GameScene extends Phaser.Scene {
     // Critical: register the collider so the runner lands on the planks.
     this.physics.add.collider(this.player, this.planks);
 
+    // Low-lying drift of fog at the bottom of the screen - a liminal void.
+    this.makeSmoke();
+
     this.cameras.main.startFollow(this.player, false, 0.1, 0.1);
     this.cameras.main.setDeadzone(140, 80);
 
@@ -169,6 +172,83 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // A soft, pale haze puff used by the bottom fog. Radial gradient so the
+  // edges are transparent and puffs blend into the sky.
+  makeSmokeTexture() {
+    const size = 128;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(size/2, size/2, 4, size/2, size/2, size/2);
+    g.addColorStop(0, 'rgba(240,236,226,0.55)');
+    g.addColorStop(0.5, 'rgba(232,227,214,0.28)');
+    g.addColorStop(1, 'rgba(220,214,200,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    if (!this.textures.exists('smokepuff')) this.textures.addCanvas('smokepuff', c);
+  }
+
+  // Spawn a drifting pool of fog puffs anchored to the bottom of the viewport.
+  // They rise slowly, widen, and fade - an endless liminal haze from below.
+  makeSmoke() {
+    this.makeSmokeTexture();
+    this.smokePuffs = [];
+    const COUNT = 26;
+    for (let i = 0; i < COUNT; i++) {
+      const sp = this.add.image(
+        (i / COUNT) * TUNE.width + rand(-40, 40),
+        TUNE.height + rand(-30, 60),
+        'smokepuff'
+      );
+      sp.setScrollFactor(0);
+      sp.setDepth(8);                       // above logs, below the runner/HUD
+      sp.setTint(0xefe9d8);
+      this.smokePuffs.push({
+        sp,
+        vx: rand(-14, 14),
+        vy: rand(-34, -20),
+        grow: rand(0.45, 0.85),
+        x0: rand(0, TUNE.width),
+        maxLife: rand(6000, 9000),
+        life: rand(0, 9000),
+      });
+      this.resetPuff(this.smokePuffs[i], true);
+    }
+  }
+
+  // (Re)place a puff at the bottom with fresh random motion.
+  resetPuff(p, soft) {
+    const yBase = TUNE.height + rand(20, 90);
+    p.sp.setPosition(rand(-40, TUNE.width + 40), yBase);
+    p.sp.setAlpha(0.0);
+    p.sp.setScale(rand(0.5, 0.9));
+    p.vx = rand(-14, 14);
+    p.vy = rand(-34, -20);
+    p.grow = rand(0.45, 0.85);
+    p.maxLife = rand(6000, 9000);
+    p.life = soft ? rand(0, p.maxLife) : 0;
+    p.sp.setVisible(true);
+  }
+
+  updateSmoke(delta) {
+    if (!this.smokePuffs) return;
+    const dt = Math.min(delta, 50);
+    for (const p of this.smokePuffs) {
+      p.life += dt;
+      // Fade in quickly, drift up and sideways, then fade out as it ages.
+      const IN = 900;                       // ms to reach full colour
+      const t = p.life / p.maxLife;
+      let a = Math.min(1, p.life / IN) * 0.34 * (1 - t * t);
+      if (a <= 0.01) a = 0;
+      p.sp.setAlpha(a);
+      p.sp.setScale(0.5 + p.grow * t);
+      p.sp.x += p.vx * (dt / 1000);
+      p.sp.y += p.vy * (dt / 1000);
+      // Respawn once it has dispersed (aged out or drifted above view).
+      if (p.life >= p.maxLife || p.sp.y < -80) this.resetPuff(p, false);
+    }
+  }
+
   makeBackground() {
     const c = document.createElement('canvas');
     c.width = TUNE.width; c.height = TUNE.height;
@@ -293,10 +373,11 @@ export class GameScene extends Phaser.Scene {
     this.player.body.collideWorldBounds = true;   // stay inside the play area
   }
 
-  update(time) {
+  update(time, delta) {
     const p = this.player;
 
     this.fillSkyline();
+    this.updateSmoke(delta);
 
     // Free movement: WASD / arrow keys set velocity in both axes.
     // Horizontal: left/right. Vertical: up (hold to climb), down (hold to sink).

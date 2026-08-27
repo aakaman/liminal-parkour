@@ -19,8 +19,10 @@ export const TUNE = {
   width: 960,
   height: 540,
   gravity: 1500,
-  runSpeed: 220,          // max horizontal speed (free WASD/arrow movement)
-  climbSpeed: 200,        // max vertical speed (up/down movement)
+  runSpeed: 150,          // max horizontal speed: a ~1.5x-height jump lands on the next cap
+  climbSpeed: 200,        // downward push speed (hold S / Down)
+  jumpVelocity: 400,      // single-jump impulse ~1.5x player height (v=sqrt(2*g*1.5*36))
+  doubleJumpVelocity: 340,// double-jump impulse (press jump again mid-air)
   maxFallSpeed: 1000,
   worldDeep: 720,         // extra play-area depth below the view for falling deep
   resetMargin: 120,       // reset this far before the hard bottom when you fall

@@ -28,7 +28,10 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, false, 0.1, 0.1);
     this.cameras.main.setDeadzone(140, 80);
 
-    this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,UP,DOWN,W,A,S,D');
+    this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,UP,DOWN,W,A,S,D,SPACE');
+
+    this._jumpPrev = false;   // edge-detect so holding jump doesn't re-jump (no flying)
+    this._airJumps = 0;
 
     this.distance = 0;
     this.hud = this.add.text(16, 12, '0 m', {
@@ -404,20 +407,30 @@ export class GameScene extends Phaser.Scene {
     this.fillPlanks();
     this.updateSmoke(delta);
 
-    // Free movement: WASD / arrow keys set velocity in both axes.
-    // Horizontal: left/right. Vertical: up (hold to climb), down (hold to sink).
-    const moveLeft  = this.keys.LEFT.isDown || this.keys.A.isDown;
-    const moveRight = this.keys.RIGHT.isDown || this.keys.D.isDown;
-    const moveUp    = this.keys.UP.isDown  || this.keys.W.isDown;
-    const moveDown  = this.keys.DOWN.isDown|| this.keys.S.isDown;
+    // Free movement + finite jump: WASD / arrows steer, and jump (W / Up /
+    // SPACE) gives a single upward impulse instead of continuous flight.
+    const moveLeft   = this.keys.LEFT.isDown || this.keys.A.isDown;
+    const moveRight  = this.keys.RIGHT.isDown || this.keys.D.isDown;
+    const jumpHeld   = this.keys.UP.isDown || this.keys.W.isDown || this.keys.SPACE.isDown;
+    const moveDown   = this.keys.DOWN.isDown || this.keys.S.isDown;
     p.setVelocityX((moveRight ? 1 : 0) * TUNE.runSpeed + (moveLeft ? -1 : 0) * TUNE.runSpeed);
-    if (moveUp) p.setVelocityY(-TUNE.climbSpeed);
-    else if (moveDown) p.setVelocityY(TUNE.climbSpeed);
-    // No vertical input: leave velocity.y alone so gravity pulls the runner
-    // down onto a cap (it rests there). Flip the run/jump frame on movement.
-    this.applyRunFrame();
 
     const ground = p.body.blocked.down || p.body.touching.down;
+    // Jump only on a fresh press (edge), so holding the key can't make you fly.
+    if (jumpHeld && !this._jumpPrev) {
+      if (ground) {
+        p.setVelocityY(-TUNE.jumpVelocity);
+        this._airJumps = 0;
+      } else if (this._airJumps === 0) {
+        p.setVelocityY(-TUNE.doubleJumpVelocity);   // double jump in the air
+        this._airJumps = 1;
+      }
+    }
+    this._jumpPrev = jumpHeld;
+    if (ground) this._airJumps = 0;
+    // Otherwise only gravity and the down push act on y - holding up can't lift.
+    if (moveDown && !ground) p.setVelocityY(TUNE.climbSpeed);
+    this.applyRunFrame();
     // Track furthest point reached, not oscillating position.
     this.distance = Math.max(this.distance || 0, Math.floor(p.x / 40));
     this.hud.setText(this.distance + ' m');

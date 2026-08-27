@@ -12,6 +12,7 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.physics.world.setBounds(0, 0, 400000, TUNE.height + 200);
     this.makeBackground();
+    this.makeSkyline();
     this.cameras.main.setBackgroundColor(PAL.skyBottom);
 
     this.makePlanks();
@@ -36,6 +37,69 @@ export class GameScene extends Phaser.Scene {
     this._pressHeld = false;
     this._air = 0;
   }
+
+  makeSkyline() {
+    // A row of tall and short 2D buildings far in the background. They
+    // parallax-scroll (slower than the world) so they pass by as the runner
+    // advances, sitting on the horizon just behind the run line.
+    this._bldgN = 0;
+    const count = 30;
+    let x = -800;
+    const colTones = ['#8a7668', '#9a8272', '#7d6a5d', '#94806f'];
+    for (let i = 0; i < count; i++) {
+      const w = randInt(120, 220);
+      // Mix of short, medium and tall buildings.
+      const r = Math.random();
+      const h = r < 0.4 ? randInt(120, 200) : r < 0.75 ? randInt(200, 320) : randInt(330, 430);
+      const tone = colTones[i % colTones.length];
+      this.addBuilding(x, w, h, tone);
+      x += w + randInt(60, 140);
+    }
+  }
+
+  addBuilding(x, w, h, tone) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    const edge = shade(tone, 0.72);
+    // Façade.
+    ctx.fillStyle = tone;
+    ctx.fillRect(0, 0, w, h);
+    // Side shade (light from the left).
+    ctx.fillStyle = edge;
+    ctx.fillRect(w - 14, 0, 14, h);
+    // Windows - a few lit dots for a dusk skyline feel.
+    const lit = ['#e8cf8a', '#cfb27a', '#b9a06a'];
+    const cols = Math.floor(w / 26);
+    const rows = Math.floor((h - 34) / 32);
+    for (let cx = 0; cx < cols; cx++) {
+      for (let ry = 0; ry < rows; ry++) {
+        if (Math.random() < 0.4) {
+          ctx.fillStyle = lit[Math.floor(Math.random() * lit.length)];
+          ctx.fillRect(12 + cx * 26, 18 + ry * 32, 12, 16);
+        }
+      }
+    }
+    // Roof edge highlight and a small rooftop hut on taller buildings.
+    ctx.fillStyle = edge;
+    ctx.fillRect(0, 0, w, 6);
+    if (h > 300) {
+      const hutW = Math.min(40, w - 20);
+      ctx.fillStyle = edge;
+      ctx.fillRect((w - hutW) / 2, -14, hutW, 14);
+    }
+    const img = this.add.image(x + w / 2, TUNE.groundY - h / 2, this.makeBuildingTexture(c));
+    img.setScrollFactor(0.55, 1);
+    img.setDepth(-40);
+    return img;
+  }
+
+  makeBuildingTexture(c) {
+    const key = 'bldg' + (this._bldgN++);
+    this.textures.addCanvas(key, c);
+    return key;
+  }
+
 
   makePlanks() {
     this.planks = this.physics.add.staticGroup();
@@ -269,4 +333,16 @@ export class GameScene extends Phaser.Scene {
   }
 }
 
+
+function randInt(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo)); }
+
+// Return a darkened (or lightened, mult>1) version of a #rrggbb color.
+function shade(hex, mult) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.max(0, Math.min(255, Math.round(r * mult)));
+  g = Math.max(0, Math.min(255, Math.round(g * mult)));
+  b = Math.max(0, Math.min(255, Math.round(b * mult)));
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
 function rand(lo, hi) { return lo + Math.random() * (hi - lo); }

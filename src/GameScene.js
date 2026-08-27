@@ -39,65 +39,84 @@ export class GameScene extends Phaser.Scene {
   }
 
   makeSkyline() {
-    // A row of tall and short 2D buildings far in the background. They
+    // A row of small two-floor family houses far in the background. They
     // parallax-scroll (slower than the world) so they pass by as the runner
     // advances, sitting on the horizon just behind the run line.
     this._bldgN = 0;
-    const count = 30;
-    let x = -800;
-    const colTones = ['#8a7668', '#9a8272', '#7d6a5d', '#94806f'];
+    const count = 24;
+    let x = -700;
+    // Cozy home wall/roof color combinations.
+    const schemes = [
+      { wall: '#d9b98c', roof: '#9a4a35' },   // cream walls, terracotta roof
+      { wall: '#c9d6c4', roof: '#6e7f6a' },   // sage walls, slate-green roof
+      { wall: '#e7d5a8', roof: '#7a5a8c' },   // cream walls, plum roof
+      { wall: '#c9b39a', roof: '#72493a' },   // tan walls, brown roof
+    ];
     for (let i = 0; i < count; i++) {
-      const w = randInt(120, 220);
-      // Mix of short, medium and tall buildings.
-      const r = Math.random();
-      const h = r < 0.4 ? randInt(120, 200) : r < 0.75 ? randInt(200, 320) : randInt(330, 430);
-      const tone = colTones[i % colTones.length];
-      this.addBuilding(x, w, h, tone);
-      x += w + randInt(60, 140);
+      const w = randInt(150, 220);
+      const h = randInt(120, 180);           // small two-storey homes
+      const scheme = schemes[i % schemes.length];
+      this.addBuilding(x, w, h, scheme);
+      x += w + randInt(120, 200);
     }
   }
 
-  addBuilding(x, w, h, tone) {
+  addBuilding(x, w, h, scheme) {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
-    const edge = shade(tone, 0.72);
-    // Façade.
-    ctx.fillStyle = tone;
-    ctx.fillRect(0, 0, w, h);
-    // Side shade (light from the left).
-    ctx.fillStyle = edge;
-    ctx.fillRect(w - 14, 0, 14, h);
-    // Windows - a few lit dots for a dusk skyline feel.
-    const lit = ['#e8cf8a', '#cfb27a', '#b9a06a'];
-    const cols = Math.floor(w / 26);
-    const rows = Math.floor((h - 34) / 32);
-    for (let cx = 0; cx < cols; cx++) {
-      for (let ry = 0; ry < rows; ry++) {
-        if (Math.random() < 0.4) {
-          ctx.fillStyle = lit[Math.floor(Math.random() * lit.length)];
-          ctx.fillRect(12 + cx * 26, 18 + ry * 32, 12, 16);
-        }
-      }
+    const wall = scheme.wall;
+    const roof = scheme.roof;
+    const wallDark = shade(wall, 0.85);
+    const roofDark = shade(roof, 0.8);
+    const rim = shade(wall, 0.7);
+
+    // Main two-storey body.
+    ctx.fillStyle = wall;
+    ctx.fillRect(2, 8, w - 4, h - 8);
+
+    // Floor line separating the two storeys.
+    ctx.fillStyle = rim;
+    ctx.fillRect(2, h / 2, w - 4, 3);
+
+    // ---- Roof: pitched triangle over the house body. ----
+    const roofH = h * 0.32;
+    ctx.fillStyle = roof;
+    ctx.beginPath();
+    ctx.moveTo(0, 10);
+    ctx.lineTo(w / 2, -roofH + 2);
+    ctx.lineTo(w, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = roofDark;
+    ctx.fillRect(0, 8, w, 3);   // eave shadow
+
+    // ---- Upper floor: two windows. ----
+    const uw = Math.floor(w * 0.22);
+    const uh = Math.floor((h / 2 - 20) * 0.5);
+    const gapU = Math.floor((w - 2 - uw * 2) / 3);
+    for (let k = 0; k < 2; k++) {
+      drawWindow(ctx, gapU + k * (uw + gapU), 18, uw, uh, wallDark);
     }
-    // Roof edge highlight and a small rooftop hut on taller buildings.
-    ctx.fillStyle = edge;
-    ctx.fillRect(0, 0, w, 6);
-    if (h > 300) {
-      const hutW = Math.min(40, w - 20);
-      ctx.fillStyle = edge;
-      ctx.fillRect((w - hutW) / 2, -14, hutW, 14);
-    }
-    const img = this.add.image(x + w / 2, TUNE.groundY - h / 2, this.makeBuildingTexture(c));
-    img.setScrollFactor(0.55, 1);
+
+    // ---- Lower floor: a door and one window. ----
+    const doorW = Math.floor(w * 0.2);
+    const doorH = Math.floor(h / 2 - 10);
+    const doorX = Math.floor((w - doorW) / 2);
+    ctx.fillStyle = roofDark;
+    ctx.fillRect(doorX, h - doorH - 4, doorW, doorH);   // door
+    ctx.fillStyle = '#e8cf8a';                          // lit panel
+    ctx.fillRect(doorX + 2, h - doorH - 2, doorW - 4, 4);
+    const wWin = Math.floor(w * 0.2);
+    const hWin = Math.floor((h / 2 - 14) * 0.55);
+    drawWindow(ctx, 14, h / 2 + 8, wWin, hWin, wallDark);
+
+    const key = 'bldg' + this._bldgN++;
+    this.textures.addCanvas(key, c);
+    const img = this.add.image(x + w / 2, TUNE.groundY - h / 2, key);
+    img.setScrollFactor(0.7, 1);
     img.setDepth(-40);
     return img;
-  }
-
-  makeBuildingTexture(c) {
-    const key = 'bldg' + (this._bldgN++);
-    this.textures.addCanvas(key, c);
-    return key;
   }
 
 
@@ -334,6 +353,16 @@ export class GameScene extends Phaser.Scene {
 }
 
 
+
+// Draw a warm, lit window with a frame on the given context.
+function drawWindow(ctx, x, y, w, h, frame) {
+  ctx.fillStyle = frame;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#f0d27a';      // warm glow
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';   // glass gleam
+  ctx.fillRect(x + 3, y + 3, Math.max(2, Math.floor((w - 6) / 2)), 2);
+}
 function randInt(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo)); }
 
 // Return a darkened (or lightened, mult>1) version of a #rrggbb color.

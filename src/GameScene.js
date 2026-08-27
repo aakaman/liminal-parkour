@@ -39,25 +39,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   makeSkyline() {
-    // A row of small two-floor family houses far in the background. They
-    // parallax-scroll (slower than the world) so they pass by as the runner
-    // advances, sitting on the horizon just behind the run line.
+    // A unison row of identical two-floor family houses, all exactly the
+    // same size and color, repeating into the distance. The eerie uniformity
+    // gives the scene a liminal, "endless suburb" feeling.
     this._bldgN = 0;
     const count = 24;
+    const w = 180;
+    const h = 150;
+    const gap = 160;
+    const scheme = { wall: '#d7c6a8', roof: '#8a6a52' };
     let x = -700;
-    // Cozy home wall/roof color combinations.
-    const schemes = [
-      { wall: '#d9b98c', roof: '#9a4a35' },   // cream walls, terracotta roof
-      { wall: '#c9d6c4', roof: '#6e7f6a' },   // sage walls, slate-green roof
-      { wall: '#e7d5a8', roof: '#7a5a8c' },   // cream walls, plum roof
-      { wall: '#c9b39a', roof: '#72493a' },   // tan walls, brown roof
-    ];
     for (let i = 0; i < count; i++) {
-      const w = randInt(150, 220);
-      const h = randInt(120, 180);           // small two-storey homes
-      const scheme = schemes[i % schemes.length];
       this.addBuilding(x, w, h, scheme);
-      x += w + randInt(120, 200);
+      x += w + gap;
     }
   }
 

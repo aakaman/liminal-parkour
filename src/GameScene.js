@@ -48,6 +48,11 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard.once('keydown', unlockWind);
     this.input.once('pointerdown', unlockWind);
     this.events.once('shutdown', () => this.wind.stop());
+
+    // Death-flash state: once triggered, colors stay inverted briefly before reset.
+    this.dying = false;
+    this._deathTime = 0;
+    if (typeof window !== 'undefined') window.__dying = false;
   }
 
   makeSkyline() {
@@ -484,7 +489,12 @@ export class GameScene extends Phaser.Scene {
     // Fail when the runner drops below the world.
     // Fall deeper before resetting (past the bottom of the view and through
     // the fog) — the longer plunge shows off the smoke before respawning.
-    if (p.y > TUNE.height + TUNE.worldDeep - TUNE.resetMargin) {
+    if (!this.dying && p.y > TUNE.height + TUNE.worldDeep - TUNE.resetMargin) {
+      this.startDeath();
+    }
+    // Hold the inverted palette for a beat, then reset — the eerie flash is
+    // what sells the death here, so give it room to linger.
+    if (this.dying && time - this._deathTime >= TUNE.deathFlash) {
       this.scene.restart();
     }
 
@@ -499,6 +509,25 @@ export class GameScene extends Phaser.Scene {
     if (p.texture && p.texture.key !== 'runner-run') p.setTexture('runner-run');
     p.setFlipX(p.body.velocity.x < -1);
     p.setScale(1, 1);
+  }
+
+  // On a fatal fall, invert the entire rendered frame for TUNE.deathFlash ms.
+  // A color-matrix negate on the camera postFX flips every color on screen,
+  // giving the whole world a sickening, otherworldly negative as you sink
+  // into the void.
+  startDeath() {
+    this.dying = true;
+    this._deathTime = this.time.now;
+    // Invert the whole frame for the death flash: the camera’s postFX
+    // color-matrix negate flips every color on screen — a full-screen,
+    // sickening negative as you sink below the world. WebGL only (postFX is
+    // a no-op under the Canvas renderer, which is just the headless check
+    // path — the browser plays in WebGL).
+    this._invFx = this.cameras.main.postFX.addColorMatrix();
+    this._invFx.negative();
+    // A violent little shake sells the impact as the world inverts.
+    this.cameras.main.shake(900, 0.012);
+    if (typeof window !== 'undefined') window.__dying = true;
   }
 }
 

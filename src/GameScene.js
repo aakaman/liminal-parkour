@@ -350,54 +350,61 @@ export class GameScene extends Phaser.Scene {
     // Draw the runner frames on a plain canvas (reliable colors) and
     // register them as textures.
     const draw = (ctx, pose) => {
-      // Cap (accent).
-      ctx.fillStyle = PAL.playerAccent;
-      ctx.fillRect(3, 2, 16, 6);
-      // Head + torso (rounded), in the runner's dark color.
-      ctx.fillStyle = PAL.player;
-      ctx.fillRect(3, 7, 16, 4);
-      ctx.beginPath();
-      ctx.moveTo(6, 12); ctx.lineTo(19, 12);
-      ctx.quadraticCurveTo(22, 12, 22, 15);
-      ctx.lineTo(22, 27);
-      ctx.quadraticCurveTo(22, 30, 19, 30);
-      ctx.lineTo(6, 30);
-      ctx.quadraticCurveTo(3, 30, 3, 27);
-      ctx.lineTo(3, 15);
-      ctx.quadraticCurveTo(3, 12, 6, 12);
-      ctx.fill();
+      // Cap + head + torso, drawn so it can be re-applied over limbs/arms in
+      // the jump poses (prevents grey arm pixels from showing as dots on the
+      // body).
+      const paintBody = () => {
+        ctx.fillStyle = PAL.playerAccent;
+        ctx.fillRect(3, 2, 16, 6);
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(3, 7, 16, 4);
+        ctx.beginPath();
+        ctx.moveTo(6, 12); ctx.lineTo(19, 12);
+        ctx.quadraticCurveTo(22, 12, 22, 15);
+        ctx.lineTo(22, 27);
+        ctx.quadraticCurveTo(22, 30, 19, 30);
+        ctx.lineTo(6, 30);
+        ctx.quadraticCurveTo(3, 30, 3, 27);
+        ctx.lineTo(3, 15);
+        ctx.quadraticCurveTo(3, 12, 6, 12);
+        ctx.fill();
+      };
+      paintBody();
       const grey = '#6a6053';
       if (pose === 'crouch') {
         // Crouch (take-off load): knees driven up toward the chest, body
-        // compressed low, arms swung back — the loading wind-up before a leap.
-        ctx.fillStyle = PAL.player;
-        // Bent thighs raised up high against the torso.
-        ctx.fillRect(4, 23, 6, 5);
-        ctx.fillRect(12, 23, 6, 5);
-        // Knees tucked / shins folded back under the thighs.
-        ctx.fillRect(4, 28, 5, 3);
-        ctx.fillRect(13, 28, 5, 3);
-        // Feet pulled up, close under the body.
-        ctx.fillRect(4, 31, 6, 2);
-        ctx.fillRect(12, 31, 6, 2);
+        // compressed low. Arms drawn first, then the body re-painted over them
+        // so no grey pixels mar the torso.
         // Arms swung back behind the hips for the wind-up.
         ctx.fillStyle = grey;
         ctx.fillRect(1, 25, 23, 2);
+        // Re-paint the body over the arms (removes grey dots over the torso).
+        paintBody();
+        // Redraw the bent legs so the crouch still reads.
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(4, 23, 6, 5);       // raised thigh
+        ctx.fillRect(12, 23, 6, 5);      // raised thigh
+        ctx.fillRect(4, 28, 5, 3);       // folded shin
+        ctx.fillRect(13, 28, 5, 3);      // folded shin
+        ctx.fillRect(4, 31, 6, 2);       // foot
+        ctx.fillRect(12, 31, 6, 2);      // foot
       } else if (pose === 'stretch') {
         // Jump stretch: body fully extended mid-air — front leg thrust
-        // forward/down, hind leg trailing, arms raised up overhead.
-        ctx.fillStyle = PAL.player;
-        // Extended legs: front leg reaching forward, hind leg streaming back.
-        ctx.fillRect(4, 27, 6, 8);   // hind leg, extended down-back
-        ctx.fillRect(13, 26, 6, 9);  // front leg, extended toward the ground
-        // Pointed feet.
-        ctx.fillRect(4, 35, 6, 1);
-        ctx.fillRect(13, 35, 6, 1);
+        // forward/down, hind leg trailing. Arms (overhead) drawn first, then the
+        // body re-painted so no grey pixels appear on the head/torso.
         // Arms stretched up overhead in a clean launch line.
         ctx.fillStyle = grey;
         ctx.fillRect(8, 14, 2, 6);
         ctx.fillRect(12, 8, 2, 12);
         ctx.fillRect(9, 6, 4, 3);
+        // Re-paint the body (cap + head + torso) over the arms.
+        paintBody();
+        // Redraw the extended legs so the stretch still reads.
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(4, 27, 6, 8);   // hind leg, extended down-back
+        ctx.fillRect(13, 26, 6, 9);  // front leg, extended toward the ground
+        ctx.fillRect(4, 35, 6, 1);   // pointed foot
+        ctx.fillRect(13, 35, 6, 1);  // pointed foot
       } else if (pose === 0) {
         // Walk stride A: legs apart, left foot forward.
         ctx.fillStyle = PAL.player;

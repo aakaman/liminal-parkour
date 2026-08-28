@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { TUNE, PAL } from './core.js';
 import { WindAmbience } from './wind.js';
+import { playGlitch } from './glitch.js';
 
 // Gameplay-first: the runner auto-runs forward; the only input is jump
 // (Space/W/Up, with a double jump in air). Tiny two-tone planks separated by
@@ -414,15 +415,16 @@ export class GameScene extends Phaser.Scene {
 
     // Free movement + finite jump: WASD / arrows steer, and jump (W / Up /
     // SPACE) gives a single upward impulse instead of continuous flight.
+    const frozen = this.dying;
     const moveLeft   = this.keys.LEFT.isDown || this.keys.A.isDown;
     const moveRight  = this.keys.RIGHT.isDown || this.keys.D.isDown;
     const jumpHeld   = this.keys.UP.isDown || this.keys.W.isDown || this.keys.SPACE.isDown;
     const moveDown   = this.keys.DOWN.isDown || this.keys.S.isDown;
-    p.setVelocityX((moveRight ? 1 : 0) * TUNE.runSpeed + (moveLeft ? -1 : 0) * TUNE.runSpeed);
+    p.setVelocityX(frozen ? 0 : (moveRight ? 1 : 0) * TUNE.runSpeed + (moveLeft ? -1 : 0) * TUNE.runSpeed);
 
     const ground = p.body.blocked.down || p.body.touching.down;
     // Jump only on a fresh press (edge), so holding the key can't make you fly.
-    if (jumpHeld && !this._jumpPrev) {
+    if (!frozen && jumpHeld && !this._jumpPrev) {
       if (ground) {
         p.setVelocityY(-TUNE.jumpVelocity);
         this._airJumps = 0;
@@ -434,7 +436,7 @@ export class GameScene extends Phaser.Scene {
     this._jumpPrev = jumpHeld;
     if (ground) this._airJumps = 0;
     // Otherwise only gravity and the down push act on y - holding up can't lift.
-    if (moveDown && !ground) p.setVelocityY(TUNE.climbSpeed);
+    if (!frozen && moveDown && !ground) p.setVelocityY(TUNE.climbSpeed);
     this.applyRunFrame();
     // Track furthest point reached, not oscillating position.
     this.distance = Math.max(this.distance || 0, Math.floor(p.x / 40));
@@ -526,7 +528,9 @@ export class GameScene extends Phaser.Scene {
     this._invFx = this.cameras.main.postFX.addColorMatrix();
     this._invFx.negative();
     // A violent little shake sells the impact as the world inverts.
-    this.cameras.main.shake(900, 0.012);
+    this.cameras.main.shake(TUNE.deathFlash, 0.012);
+    // A glitchy stutter as the world inverts — the sound of being reset.
+    playGlitch(this.sound ? this.sound.context : null);
     if (typeof window !== 'undefined') window.__dying = true;
   }
 }

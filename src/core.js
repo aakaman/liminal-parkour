@@ -25,7 +25,7 @@ export const TUNE = {
   doubleJumpVelocity: 340,// double-jump impulse (press jump again mid-air)
   maxFallSpeed: 1000,
   worldDeep: 720,         // extra play-area depth below the view for falling deep
-  deathFlash: 500,        // ms of full-screen color inversion after a fatal fall
+  deathFlash: 300,        // ms of full-screen color inversion after a fatal fall
   resetMargin: 120,       // reset this far before the hard bottom when you fall
   logWidth: 32,         // cap a bit wider than the player (player sprite is 22px)
   logStartW: 720,

@@ -27,19 +27,19 @@ export function playGlitch(audioCtx) {
   // stutters; a lowpass that snaps shut mid-burst gives it that memory-card
   // failure feel.
   const noiseSrc = ctx.createBufferSource();
-  noiseSrc.buffer = noiseBuffer(ctx, 0.3);
+  noiseSrc.buffer = noiseBuffer(ctx, 0.25);
   noiseSrc.loop = true;
 
   const nLevel = ctx.createGain();
   const noiseEnv = ctx.createGain();
   noiseEnv.gain.setValueAtTime(0, t0);
   noiseEnv.gain.linearRampToValueAtTime(0.5, t0 + 0.012);
-  noiseEnv.gain.exponentialRampToValueAtTime(0.001, t0 + 0.5);
+  noiseEnv.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
 
   const nFilter = ctx.createBiquadFilter();
   nFilter.type = 'lowpass';
   nFilter.frequency.setValueAtTime(8200, t0);
-  nFilter.frequency.exponentialRampToValueAtTime(420, t0 + 0.42);
+  nFilter.frequency.exponentialRampToValueAtTime(420, t0 + 0.25);
 
   // Stutter chopper so the noise "flutters" like corrupted frames.
   const chop = ctx.createOscillator();
@@ -55,43 +55,43 @@ export function playGlitch(audioCtx) {
   nLevel.connect(out);
 
   chop.start(t0);
-  chop.stop(t0 + 0.5);
+  chop.stop(t0 + 0.3);
   noiseSrc.start(t0);
-  noiseSrc.stop(t0 + 0.5);
+  noiseSrc.stop(t0 + 0.3);
 
   // --- Layer 2: rapid descending pitch stop (the "error tone") ---
   // A short sawtooth note that drops two octaves in a few ms, repeated over
   // three stutter taps — the classic "selected clip" / system-failure chirp.
   for (let i = 0; i < 3; i++) {
-    const ts = t0 + i * 0.09;
+    const ts = t0 + i * 0.055;
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(1400, ts);
-    osc.frequency.exponentialRampToValueAtTime(260, ts + 0.075);
+    osc.frequency.exponentialRampToValueAtTime(260, ts + 0.045);
 
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.22, ts);
-    g.gain.exponentialRampToValueAtTime(0.001, ts + 0.085);
+    g.gain.exponentialRampToValueAtTime(0.001, ts + 0.05);
 
     osc.connect(g);
     g.connect(out);
     osc.start(ts);
-    osc.stop(ts + 0.09);
+    osc.stop(ts + 0.05);
   }
 
   // --- Layer 3: short high blip on the very last frame (the "reset" hit) ---
   const blip = ctx.createOscillator();
   blip.type = 'square';
-  blip.frequency.setValueAtTime(900, t0 + 0.46);
-  blip.frequency.exponentialRampToValueAtTime(220, t0 + 0.56);
+  blip.frequency.setValueAtTime(900, t0 + 0.16);
+  blip.frequency.exponentialRampToValueAtTime(220, t0 + 0.24);
   const blipGain = ctx.createGain();
-  blipGain.gain.setValueAtTime(0.001, t0 + 0.46);
-  blipGain.gain.linearRampToValueAtTime(0.3, t0 + 0.47);
-  blipGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.58);
+  blipGain.gain.setValueAtTime(0.001, t0 + 0.16);
+  blipGain.gain.linearRampToValueAtTime(0.3, t0 + 0.17);
+  blipGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25);
   blip.connect(blipGain);
   blipGain.connect(out);
-  blip.start(t0 + 0.46);
-  blip.stop(t0 + 0.58);
+  blip.start(t0 + 0.16);
+  blip.stop(t0 + 0.25);
 }
 
 // One short channel of white noise for the crumble layer.

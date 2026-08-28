@@ -367,17 +367,37 @@ export class GameScene extends Phaser.Scene {
       ctx.quadraticCurveTo(3, 12, 6, 12);
       ctx.fill();
       const grey = '#6a6053';
-      if (pose === 'tuck') {
-        // Jump frame: legs tucked under the body, arm up / forward.
+      if (pose === 'crouch') {
+        // Crouch (take-off load): knees driven up toward the chest, body
+        // compressed low, arms swung back — the loading wind-up before a leap.
         ctx.fillStyle = PAL.player;
-        ctx.fillRect(5, 27, 6, 5);       // tucked thigh
-        ctx.fillRect(12, 27, 6, 5);      // tucked thigh
-        ctx.fillRect(5, 31, 6, 3);       // tucked shin
-        ctx.fillRect(12, 31, 6, 3);      // tucked shin
+        // Bent thighs raised up high against the torso.
+        ctx.fillRect(4, 23, 6, 5);
+        ctx.fillRect(12, 23, 6, 5);
+        // Knees tucked / shins folded back under the thighs.
+        ctx.fillRect(4, 28, 5, 3);
+        ctx.fillRect(13, 28, 5, 3);
+        // Feet pulled up, close under the body.
+        ctx.fillRect(4, 31, 6, 2);
+        ctx.fillRect(12, 31, 6, 2);
+        // Arms swung back behind the hips for the wind-up.
         ctx.fillStyle = grey;
-        ctx.fillRect(1, 20, 6, 12);      // arm up / forward
+        ctx.fillRect(1, 25, 23, 2);
+      } else if (pose === 'stretch') {
+        // Jump stretch: body fully extended mid-air — front leg thrust
+        // forward/down, hind leg trailing, arms raised up overhead.
         ctx.fillStyle = PAL.player;
-        ctx.fillRect(15, 20, 5, 5);      // other arm back
+        // Extended legs: front leg reaching forward, hind leg streaming back.
+        ctx.fillRect(4, 27, 6, 8);   // hind leg, extended down-back
+        ctx.fillRect(13, 26, 6, 9);  // front leg, extended toward the ground
+        // Pointed feet.
+        ctx.fillRect(4, 35, 6, 1);
+        ctx.fillRect(13, 35, 6, 1);
+        // Arms stretched up overhead in a clean launch line.
+        ctx.fillStyle = grey;
+        ctx.fillRect(8, 14, 2, 6);
+        ctx.fillRect(12, 8, 2, 12);
+        ctx.fillRect(9, 6, 4, 3);
       } else if (pose === 0) {
         // Walk stride A: legs apart, left foot forward.
         ctx.fillStyle = PAL.player;
@@ -422,7 +442,7 @@ export class GameScene extends Phaser.Scene {
         draw(sctx, f);
         sctx.translate(22, 0);
       }
-      this.textures.addSpritesheet('runner-run', sheet, { frameWidth: 22, frameHeight: 36 });
+      this.textures.addSpriteSheet('runner-run', sheet, { frameWidth: 22, frameHeight: 36 });
     }
     if (!this.anims.exists('runner-run-anim')) {
       this.anims.create({
@@ -433,12 +453,27 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    // Jump frame stays a single static texture (airborne pose).
+    // ---- Jump animation ----
+    // A 2-frame crouch -> stretch cycle: the runner loads down before the
+    // leap, then extends fully mid-air. Laid out side by side in a 44x36 sheet.
     if (!this.textures.exists('runner-jump')) {
-      const j = document.createElement('canvas');
-      j.width = 22; j.height = 36; draw(j.getContext('2d'), 'tuck');
-      this.textures.addCanvas('runner-jump', j);
+      const sheet = document.createElement('canvas');
+      sheet.width = 22 * 2; sheet.height = 36;
+      const sctx = sheet.getContext('2d');
+      draw(sctx, 'crouch');
+      sctx.translate(22, 0);
+      draw(sctx, 'stretch');
+      this.textures.addSpriteSheet('runner-jump', sheet, { frameWidth: 22, frameHeight: 36 });
     }
+    if (!this.anims.exists('runner-jump-anim')) {
+      this.anims.create({
+        key: 'runner-jump-anim',
+        frames: this.anims.generateFrameNumbers('runner-jump', { start: 0, end: 1 }),
+        frameRate: 12,
+        repeat: 0,
+      });
+    }
+
 
 
     // Spawn feet ON TOP of the starting base's cap.
@@ -549,18 +584,23 @@ export class GameScene extends Phaser.Scene {
 
   }
 
-  // Keep the runner animated: walking cycle on the ground, static jump
-  // frame while airborne. Also keep it facing the way it moves.
+  // Keep the runner animated: walk cycle only while actually moving on the
+  // ground, a still standing pose when idle, and a static jump frame airborne.
   applyRunFrame(ground) {
     const p = this.player;
-    if (ground) {
-      // On the ground: ensure the walk cycle is playing.
+    const moving = Math.abs(p.body.velocity.x) > 10;
+    if (ground && moving) {
+      // Moving on the ground: run the walk cycle.
       if (p.texture.key !== 'runner-run' || !p.anims.isPlaying) {
         p.play('runner-run-anim');
       }
+    } else if (ground) {
+      // Standing still: freeze on a neutral standing frame (feet together).
+      this.player.anims.stop();
+      p.setTexture('runner-run', 1);
     } else if (p.texture.key !== 'runner-jump') {
-      // Airborne: freeze on the tucked jump pose.
-      p.setTexture('runner-jump');
+      // Airborne: play the crouch -> stretch jump once, then hold it.
+      p.play('runner-jump-anim');
     }
     p.setFlipX(p.body.velocity.x < -1);
     p.setScale(1, 1);

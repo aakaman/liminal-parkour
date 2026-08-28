@@ -3,46 +3,68 @@ import { TUNE, PAL } from './core.js';
 import { WindAmbience } from './wind.js';
 import { playGlitch } from './glitch.js';
 
-// Gameplay-first: the runner auto-runs forward; the only input is jump
-// (Space/W/Up, with a double jump in air). Tiny two-tone planks separated by
-// gaps form the endless path. Falling below the world ends the run.
+// ============================================================================
+// LIMINAL PARKOUR — pseudo-3D first-person view
+// ----------------------------------------------------------------------------
+// The classic side-scroller is re-staged as an endless first-person forward
+// run down a receding avenue of log caps, with family houses flanking both
+// sides and converging to a vanishing point at the horizon. The world is
+// rendered with a simple perspective billboard projection (objects grow and
+// drop toward the camera as they approach, shrinking into the distance), so
+// it reads as true forward depth without a 3D engine.
+//
+// All of the original mechanics are preserved:
+//   - auto-forward run + single/double jump (Space / W / Up)
+//   - hold S/Down to drop faster, gentle climb/descend caps
+//   - fall into the void below the path -> color-inversion death flash +
+//     procedural glitch sound + camera shake -> respawn at spawn
+//   - procedural wind ambience, liminal bottom fog, endless distance HUD
+// ============================================================================
+
 export class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'Game' });
   }
 
   create() {
-    this.physics.world.setBounds(0, 0, 400000, TUNE.height + TUNE.worldDeep);
-    this.makeBackground();
-    this.makeSkyline();
+    // Fixed camera at eye level, looking down the forward axis.
     this.cameras.main.setBackgroundColor(PAL.skyBottom);
 
-    this.makePlanks();
-    this.makePlayer();
+    // Vanishing point (horizon center) and perspective focal length.
+    this.horizonY = 150;
+    this.vpx = TUNE.width / 2;
+    this.f = 420;
 
-    // Critical: register the collider so the runner lands on the planks.
-    this.physics.add.collider(this.player, this.planks);
-
-    // Low-lying drift of fog at the bottom of the screen - a liminal void.
-    this.makeSmoke();
-
-    this.cameras.main.startFollow(this.player, false, 0.1, 0.1);
-    this.cameras.main.setDeadzone(140, 80);
-
-    this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,UP,DOWN,W,A,S,D,SPACE');
-
-    this._jumpPrev = false;   // edge-detect so holding jump doesn't re-jump (no flying)
+    // Movement state: forward position along the path.
+    this.runZ = 0;
+    this.vz = 0;
+    this.yPos = TUNE.startTop;
+    this.vy = 0;
+    this.grounded = true;
     this._airJumps = 0;
+    this._jumpPrev = false;
+    this.lane = 0;        // lateral lane (-1,0,1) — steer with A / D
+    this.dying = false;
+    this._deathTime = 0;
 
     this.distance = 0;
+    this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,UP,DOWN,W,A,S,D,SPACE');
+
+    // Build the endless, receding course of log caps and flanking houses.
+    this.makeLogPath();
+    this.makeHouses();
+    this.makeSkylineBackdrop();
+    this.makeFog();
+
+    // HUD.
     this.hud = this.add.text(16, 12, '0 m', {
       fontFamily: 'monospace', fontSize: '24px', color: '#2a2724',
     }).setDepth(20);
-        this.add.text(TUNE.width / 2, 22, 'WASD / arrows - move freely across the logs', {
-      fontFamily: 'monospace', fontSize: '15px', color: '#4a443c',
-    }).setOrigin(0.5, 0).setDepth(20);
+    this.add.text(TUNE.width / 2, 22, 'WASD / arrows — run forward, jump the gaps',
+      { fontFamily: 'monospace', fontSize: '15px', color: '#4a443c' })
+      .setOrigin(0.5, 0).setDepth(20);
 
-    // Ambient wind: procedural, plays from the first input (autoplay rules).
+    // Procedural wind, unlocked by the first input (autoplay rules).
     this.wind = new WindAmbience(this.sound ? this.sound.context : null);
     this.wind.start();
     const unlockWind = () => this.wind.start();
@@ -50,623 +72,381 @@ export class GameScene extends Phaser.Scene {
     this.input.once('pointerdown', unlockWind);
     this.events.once('shutdown', () => this.wind.stop());
 
-    // Death-flash state: once triggered, colors stay inverted briefly before reset.
-    this.dying = false;
-    this._deathTime = 0;
-    if (typeof window !== 'undefined') window.__dying = false;
+    if (typeof window !== 'undefined') {
+      window.__dying = false;
+      window.__grounded = true;
+    }
   }
 
-  makeSkyline() {
-    // A unison row of identical two-floor family houses, all exactly the
-    // same size and color, repeating into the distance. The eerie uniformity
-    // gives the scene a liminal, "endless suburb" feeling.
-    // A single shared texture is reused for every house, and new houses are
-    // spawned on demand as the runner advances so they never run out.
-    const w = 180;
-    const h = 150;
-    const scheme = { wall: '#d7c6a8', roof: '#8a6a52' };
-    this._houseW = w;
-    this._houseH = h;
-    this._houseStep = w + 160;                 // house + gap spacing
-    this._skyStartX = -700;
-    this._nextHouseX = this._skyStartX;
+  // ---- Perspective projection helpers ----
+  project(worldX, worldY, z) {
+    const s = this.f / (this.f + z);
+    const camH = this.viewY || 0; // downward screen shift from the runner's height
+    return { x: this.vpx + worldX * s, y: this.horizonY + (worldY - this.horizonY) * s - camH, s };
+  }
+
+  groundY(z) {
+    return TUNE.height + z * 0.25;
+  }
+
+  // ---- Receding log path ----
+  makeLogPath() {
+    this.caps = [];
+    this._nextZ = 0;
+    this._capTop = 0;
+    this._capLane = 0;
+    this.makeCapTexture();
+    this.caps.push(this.makeCap(40, 0, 0, 220));
+    this._nextZ = 40 + 220;
+    this.fillPath();
+  }
+
+  makeCapTexture() {
+    if (this.textures.exists('cap')) return;
+    const R = 64, c = document.createElement('canvas');
+    c.width = c.height = R * 2;
+    const ctx = c.getContext('2d');
+    // Opaque log end: bright wooden face ringed by bark, like the top of a
+    // log seen from head-on. Fully solid so distant caps never go see-through.
+    // Exposed face (light wood).
+    ctx.fillStyle = PAL.plankTop;
+    ctx.beginPath(); ctx.arc(R, R, R, 0, Math.PI * 2); ctx.fill();
+    // Slight top-light highlight.
+    const shine = ctx.createRadialGradient(R - 8, R - 14, 6, R, R, R);
+    shine.addColorStop(0, PAL.plankTopHi);
+    shine.addColorStop(0.35, PAL.plankTop);
+    shine.addColorStop(0.78, PAL.plankWhole);
+    shine.addColorStop(1, PAL.plankEdge);
+    ctx.fillStyle = shine;
+    ctx.beginPath(); ctx.arc(R, R, R, 0, Math.PI * 2); ctx.fill();
+    // Bark ring around the rim.
+    ctx.strokeStyle = PAL.plankEdge; ctx.lineWidth = 9; ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(R, R, R - 4, 0, Math.PI * 2); ctx.stroke();
+    // Grain rings in the exposed face.
+    ctx.strokeStyle = PAL.plankRing; ctx.globalAlpha = 0.55; ctx.lineWidth = 3;
+    for (let r = 15; r < R - 10; r += 9) {
+      ctx.beginPath(); ctx.arc(R, R, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    this.textures.addCanvas('cap', c);
+  }
+
+  makeCap(z, lane, top, radius) {
+    const img = this.add.image(0, 0, 'cap');
+    img.setAlpha(0);
+    img.setDepth(5);
+    this.caps.push({ img, z, lane, top, r: radius, live: true });
+    return this.caps[this.caps.length - 1];
+  }
+
+  fillPath() {
+    const POP_AHEAD = this.f * 6;
+    while (this._nextZ < this.runZ + POP_AHEAD) {
+      const gap = Phaser.Math.Between(TUNE.gapMin, TUNE.gapMax);
+      this._nextZ += gap;
+      const goUp = Phaser.Math.FloatBetween(0, 1) < 0.5;
+      const delta = goUp
+        ? -Phaser.Math.Between(12, TUNE.climbStep)
+        : Phaser.Math.Between(-TUNE.descendStep, TUNE.descendStep);
+      this._capTop = Math.max(-340, Math.min(TUNE.logTopMax, this._capTop + delta));
+      if (Phaser.Math.FloatBetween(0, 1) < 0.3) {
+        this._capLane = Phaser.Math.Between(-1, 1);
+      }
+      const r = Phaser.Math.Between(Math.round(TUNE.logWidth * 0.55), Math.round(TUNE.logWidth * 0.9));
+      this.makeCap(this._nextZ, this._capLane, this._capTop, r);
+    }
+    while (this.caps.length && this.caps[0].z < this.runZ - 320) {
+      this.caps[0].img.destroy();
+      this.caps.shift();
+    }
+  }
+
+  // ---- Flanking houses ----
+  makeHouses() {
     this.houses = [];
-
-    // Build the one shared house texture.
-    this.makeHouseTexture(scheme, w, h);
-
-    // Seed the first houses so the view is never empty at spawn.
-    this.fillSkyline();
+    this._nextHouseZ = 20;
+    this.makeHouseTexture();
+    this.fillHouses();
   }
 
-  makeHouseTexture(scheme, w, h) {
+  makeHouseTexture() {
+    if (this.textures.exists('bldg-house')) return;
+    const w = 180, h = 150;
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
-    const wall = scheme.wall;
-    const roof = scheme.roof;
-    const wallDark = shade(wall, 0.85);
-    const roofDark = shade(roof, 0.8);
-    const rim = shade(wall, 0.7);
-
-    // Main two-storey body.
-    ctx.fillStyle = wall;
-    ctx.fillRect(2, 8, w - 4, h - 8);
-
-    // Floor line separating the two storeys.
-    ctx.fillStyle = rim;
-    ctx.fillRect(2, h / 2, w - 4, 3);
-
-    // ---- Roof: pitched triangle over the house body. ----
+    const wall = '#d7c6a8', roof = '#8a6a52';
+    const wallDark = shade(wall, 0.85), roofDark = shade(roof, 0.8), rim = shade(wall, 0.7);
+    ctx.fillStyle = wall; ctx.fillRect(2, 8, w - 4, h - 8);
+    ctx.fillStyle = rim; ctx.fillRect(2, h / 2, w - 4, 3);
     const roofH = h * 0.32;
     ctx.fillStyle = roof;
-    ctx.beginPath();
-    ctx.moveTo(0, 10);
-    ctx.lineTo(w / 2, -roofH + 2);
-    ctx.lineTo(w, 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = roofDark;
-    ctx.fillRect(0, 8, w, 3);   // eave shadow
-
-    // ---- Upper floor: two windows. ----
-    const uw = Math.floor(w * 0.22);
-    const uh = Math.floor((h / 2 - 20) * 0.5);
+    ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(w / 2, -roofH + 2); ctx.lineTo(w, 10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = roofDark; ctx.fillRect(0, 8, w, 3);
+    const uw = Math.floor(w * 0.22), uh = Math.floor((h / 2 - 20) * 0.5);
     const gapU = Math.floor((w - 2 - uw * 2) / 3);
-    for (let k = 0; k < 2; k++) {
-      drawWindow(ctx, gapU + k * (uw + gapU), 18, uw, uh, wallDark);
-    }
-
-    // ---- Lower floor: a door and one window. ----
-    const doorW = Math.floor(w * 0.2);
-    const doorH = Math.floor(h / 2 - 10);
+    for (let k = 0; k < 2; k++) drawWindow(ctx, gapU + k * (uw + gapU), 18, uw, uh, wallDark);
+    const doorW = Math.floor(w * 0.2), doorH = Math.floor(h / 2 - 10);
     const doorX = Math.floor((w - doorW) / 2);
-    ctx.fillStyle = roofDark;
-    ctx.fillRect(doorX, h - doorH - 4, doorW, doorH);   // door
-    ctx.fillStyle = '#e8cf8a';                          // lit panel
-    ctx.fillRect(doorX + 2, h - doorH - 2, doorW - 4, 4);
-    const wWin = Math.floor(w * 0.2);
-    const hWin = Math.floor((h / 2 - 14) * 0.55);
-    drawWindow(ctx, 14, h / 2 + 8, wWin, hWin, wallDark);
-
-    if (!this.textures.exists('bldg-house')) this.textures.addCanvas('bldg-house', c);
+    ctx.fillStyle = roofDark; ctx.fillRect(doorX, h - doorH - 4, doorW, doorH);
+    ctx.fillStyle = '#e8cf8a'; ctx.fillRect(doorX + 2, h - doorH - 2, doorW - 4, 4);
+    drawWindow(ctx, 14, h / 2 + 8, Math.floor(w * 0.2), Math.floor((h / 2 - 14) * 0.55), wallDark);
+    this.textures.addCanvas('bldg-house', c);
   }
 
-  spawnHouse(x) {
-    const img = this.add.image(x + this._houseW / 2, TUNE.groundY - this._houseH / 2, 'bldg-house');
-    img.setScrollFactor(0.7, 1);
-    img.setDepth(-40);
-    this.houses.push(img);
-    return img;
-  }
-
-  // Spawn enough houses to always fill the visible view to the right,
-  // and drop houses that have scrolled well off to the left of the view.
-  // Houses use a parallax scrollFactor of 0.7, so their on-screen position is
-  // (worldX - scrollX * 0.7). All bounds here compare in that parallax space.
-  fillSkyline() {
-    const PARALLAX = 0.7;
-    const hs = this.cameras.main.scrollX * PARALLAX;   // effective house-scroll
-    const ahead = TUNE.width * 1.6;                    // fill ~1.6 screens ahead
-    while (this._nextHouseX - hs < ahead) {
-      this.spawnHouse(this._nextHouseX);
-      this._nextHouseX += this._houseStep;
-    }
-    const keepBehind = TUNE.width * 0.5;               // a half screen off-left
-    while (this.houses.length) {
-      const h0 = this.houses[0];
-      if (h0.x + this._houseW - hs < -keepBehind) {
-        h0.destroy();
-        this.houses.shift();
-      } else {
-        break;
+  fillHouses() {
+    const POP = this.f * 7;
+    while (this._nextHouseZ < this.runZ + POP) {
+      for (let si = 0; si < 2; si++) {
+        const side = si === 0 ? -1 : 1;
+        const img = this.add.image(0, 0, 'bldg-house');
+        img.setAlpha(0); img.setDepth(-40);
+        this.houses.push({ img, z: this._nextHouseZ, side,
+          lane: Phaser.Math.Between(220, 420), top: Phaser.Math.Between(30, 130) });
       }
+      this._nextHouseZ += Phaser.Math.Between(180, 320);
+    }
+    while (this.houses.length && this.houses[0].z < this.runZ - 260) {
+      this.houses[0].img.destroy();
+      this.houses.shift();
     }
   }
 
-  makePlanks() {
-    this.planks = this.physics.add.staticGroup();
-    this._plankList = [];                 // ordered list of spawned logs (for cleanup)
-    this._plankX = -80;
-    this._plankTopY = TUNE.startTop;
-    // A wide, flat starting base so the runner spawns grounded before climbing.
-    const base = this.addPlank(-80, TUNE.startTop, TUNE.logHMin, TUNE.logStartW);
-    this._plankList.push({ obj: base, x1: -80 + TUNE.logStartW });
-    this._plankX = -80 + TUNE.logStartW;
-    this.fillPlanks();
-  }
-
-  // Keep tower logs endlessly: spawn more ahead of the runner as they advance,
-  // and drop logs that are far behind to keep memory bounded. Mirrors the
-  // skyline house fill so logs never simply run out.
-  fillPlanks() {
-    const aheadPx = this.player ? this.player.x + TUNE.width * 1.6 + 300 : TUNE.width * 2;
-    while (this._plankX < aheadPx) {
-      this._plankTopY = nextTop(this._plankTopY);
-      const h = rand(TUNE.logHMin, TUNE.logHMax);
-      const pl = this.addPlank(this._plankX, this._plankTopY, h);
-      this._plankList.push({ obj: pl, x1: this._plankX + TUNE.logWidth });
-      this._plankX += TUNE.logWidth + rand(TUNE.gapMin, TUNE.gapMax);
+  // ---- Sky + distant ground plane ----
+  makeSkylineBackdrop() {
+    if (!this.textures.exists('sky')) {
+      const c = document.createElement('canvas');
+      c.width = TUNE.width; c.height = TUNE.height;
+      const ctx = c.getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, TUNE.height);
+      grad.addColorStop(0, PAL.skyTop);
+      grad.addColorStop(0.3, PAL.skyBottom);
+      grad.addColorStop(1, '#efe9da');
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, TUNE.width, TUNE.height);
+      this.textures.addCanvas('sky', c);
     }
-    const keepBehind = TUNE.width * 2;     // keep ~2 screens behind the runner
-    const pX = this.player ? this.player.x : 0;
-    while (this._plankList.length && this._plankList[0].x1 < pX - keepBehind) {
-      this._plankList[0].obj.destroy();
-      this._plankList.shift();
+    this.add.image(TUNE.width / 2, TUNE.height / 2, 'sky').setScrollFactor(0).setDepth(-50);
+    const g = this.add.graphics().setDepth(-45).setScrollFactor(0);
+    const gy = TUNE.height, hy = this.horizonY;
+    g.fillStyle(0xd6cdbf, 0.6);
+    g.fillPoints([
+      new Phaser.Geom.Point(0, hy + 2),
+      new Phaser.Geom.Point(TUNE.width, hy + 2),
+      new Phaser.Geom.Point(TUNE.width, gy),
+      new Phaser.Geom.Point(0, gy)
+    ], true);
+  }
+
+  // ---- Liminal fog ----
+  makeFog() {
+    if (!this.textures.exists('smokepuff')) {
+      const size = 128, c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      const gg = ctx.createRadialGradient(size / 2, size / 2, 4, size / 2, size / 2, size / 2);
+      gg.addColorStop(0, 'rgba(240,236,226,0.55)');
+      gg.addColorStop(0.5, 'rgba(232,227,214,0.28)');
+      gg.addColorStop(1, 'rgba(220,214,200,0)');
+      ctx.fillStyle = gg; ctx.fillRect(0, 0, size, size);
+      this.textures.addCanvas('smokepuff', c);
     }
-  }
-
-  // A soft, pale haze puff used by the bottom fog. Radial gradient so the
-  // edges are transparent and puffs blend into the sky.
-  makeSmokeTexture() {
-    const size = 128;
-    const c = document.createElement('canvas');
-    c.width = size; c.height = size;
-    const ctx = c.getContext('2d');
-    const g = ctx.createRadialGradient(size/2, size/2, 4, size/2, size/2, size/2);
-    g.addColorStop(0, 'rgba(240,236,226,0.55)');
-    g.addColorStop(0.5, 'rgba(232,227,214,0.28)');
-    g.addColorStop(1, 'rgba(220,214,200,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, size, size);
-    if (!this.textures.exists('smokepuff')) this.textures.addCanvas('smokepuff', c);
-  }
-
-  // Spawn a drifting pool of fog puffs anchored to the bottom of the viewport.
-  // They rise slowly, widen, and fade - an endless liminal haze from below.
-  makeSmoke() {
-    this.makeSmokeTexture();
     this.smokePuffs = [];
     const COUNT = 40;
     for (let i = 0; i < COUNT; i++) {
-      const sp = this.add.image(
-        (i / COUNT) * TUNE.width + rand(-40, 40),
-        TUNE.height + rand(-30, 60),
-        'smokepuff'
-      );
-      sp.setScrollFactor(0);
-      sp.setDepth(8);                       // above logs, below the runner/HUD
-      sp.setTint(0xefe9d8);
-      this.smokePuffs.push({
-        sp,
-        vx: rand(-14, 14),
-        vy: rand(-34, -20),
-        grow: rand(0.45, 0.85),
-        x0: rand(0, TUNE.width),
-        maxLife: rand(6000, 9000),
-        life: rand(0, 9000),
-      });
+      const sp = this.add.image(0, TUNE.height + 20, 'smokepuff');
+      sp.setScrollFactor(0); sp.setDepth(8); sp.setTint(0xefe9d8);
+      this.smokePuffs.push({ sp, vx: rand(-14, 14), vy: rand(-34, -20),
+        grow: rand(0.45, 0.85), x0: rand(0, TUNE.width),
+        maxLife: rand(6000, 9000), life: rand(0, 9000) });
       this.resetPuff(this.smokePuffs[i], true);
     }
   }
 
-  // (Re)place a puff at the bottom with fresh random motion.
   resetPuff(p, soft) {
-    const yBase = TUNE.height + rand(20, 90);
-    p.sp.setPosition(rand(-40, TUNE.width + 40), yBase);
-    p.sp.setAlpha(0.0);
+    p.sp.x = rand(-40, TUNE.width + 40);
+    p.sp.y = TUNE.height + rand(20, 90);
+    p.sp.setAlpha(0);
     p.sp.setScale(rand(0.5, 0.9));
-    p.vx = rand(-14, 14);
-    p.vy = rand(-34, -20);
-    p.grow = rand(0.45, 0.85);
-    p.maxLife = rand(6000, 9000);
-    p.life = soft ? rand(0, p.maxLife) : 0;
+    p.vx = rand(-14, 14); p.vy = rand(-34, -20); p.grow = rand(0.45, 0.85);
+    p.maxLife = rand(6000, 9000); p.life = soft ? rand(0, p.maxLife) : 0;
     p.sp.setVisible(true);
   }
 
-  updateSmoke(delta) {
-    if (!this.smokePuffs) return;
+  updateFog(delta) {
     const dt = Math.min(delta, 50);
-    // How low the runner is: sy = screen y of the runner (0 = top, ~540 = bottom).
-    // The closer the runner is to the bottom, the denser and brighter the fog.
-    const sy = this.player.y - this.cameras.main.scrollY;
-    const lowFactor = Math.max(0, Math.min(1, (sy - 200) / 170));
-    for (const p of this.smokePuffs) {
+    const f = Math.max(0, Math.min(1, (this.yPos - TUNE.startTop) / 340));
+    for (let j = 0; j < this.smokePuffs.length; j++) {
+      const p = this.smokePuffs[j];
       p.life += dt;
-      // Fade in quickly, drift up and sideways, then fade out as it ages.
-      // Base fog is always there; sinking lowers the base, thickens, and
-      // also lets puffs sit higher toward the runner.
-      const IN = 900;                       // ms to reach full colour
       const t = p.life / p.maxLife;
-      const maxA = 0.28 + 0.5 * lowFactor;  // faint up high, thick down low
-      let a = Math.min(1, p.life / IN) * maxA * (1 - t * t);
+      const maxA = 0.28 + 0.5 * f;
+      let a = Math.min(1, p.life / 900) * maxA * (1 - t * t);
       if (a <= 0.01) a = 0;
       p.sp.setAlpha(a);
-      p.sp.setScale(0.5 + (p.grow + lowFactor * 0.5) * t);
+      p.sp.setScale(0.5 + (p.grow + f * 0.5) * t);
       p.sp.x += p.vx * (dt / 1000);
-      p.sp.y += (p.vy - lowFactor * 14) * (dt / 1000);
-      // Respawn once it has dispersed (aged out or drifted above view).
+      p.sp.y += (p.vy - f * 14) * (dt / 1000);
       if (p.life >= p.maxLife || p.sp.y < -80) this.resetPuff(p, false);
     }
-    // Expose for headless checks.
-    if (typeof window !== 'undefined') window.__smokeAmount = lowFactor;
+    if (typeof window !== 'undefined') window.__fog = Math.round(f * 100) / 100;
   }
 
-  makeBackground() {
-    const c = document.createElement('canvas');
-    c.width = TUNE.width; c.height = TUNE.height;
-    const ctx = c.getContext('2d');
-    const grad = ctx.createLinearGradient(0, 0, 0, TUNE.height);
-    grad.addColorStop(0, PAL.skyTop);
-    grad.addColorStop(1, PAL.skyBottom);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, TUNE.width, TUNE.height);
-    if (!this.textures.exists('sky')) this.textures.addCanvas('sky', c);
-    this.add.image(TUNE.width / 2, TUNE.height / 2, 'sky').setScrollFactor(0).setDepth(-50);
-  }
-
-  // A vertical wooden log with a bright top cap the runner lands on.
-  // x is the log's left edge, topY its top (cap) elevation, h its height,
-  // w its horizontal thickness (the cap width).
-  addPlank(x, topY, h, w = TUNE.logWidth) {
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d');
-    const P = PAL;
-    // Bark / wood body filling the log.
-    ctx.fillStyle = P.plankWhole;
-    ctx.fillRect(2, 4, w - 4, h - 4);
-    ctx.fillStyle = P.plankWholeDark;
-    ctx.fillRect(2, 4, 2, h - 4);                    // dark edge shading
-    // Horizontal tree rings (grain running down the log).
-    ctx.strokeStyle = P.plankRing;
-    ctx.globalAlpha = 0.5;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 7; i < h; i += 14) { ctx.moveTo(2, i); ctx.lineTo(w - 2, i); }
-    ctx.stroke();
-    // Rough-bark ticks along both sides.
-    ctx.fillStyle = P.plankEdge;
-    ctx.globalAlpha = 0.4;
-    for (let i = 7; i < h; i += 12) { ctx.fillRect(0, i, 2, 4); ctx.fillRect(w - 2, i, 2, 4); }
-    ctx.globalAlpha = 1;
-    // Bright TOP landing cap - the runner stands on this.
-    ctx.fillStyle = P.plankTop;
-    ctx.fillRect(0, 0, w, 7);
-    ctx.fillStyle = P.plankTopHi;
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(0, 2, w, 2);                        // highlight on the cap
-    ctx.globalAlpha = 1;
-    // Soft shadow along the bottom edge.
-    ctx.fillStyle = '#2e2418';
-    ctx.globalAlpha = 0.18;
-    ctx.fillRect(0, h - 3, w, 3);
-    ctx.globalAlpha = 1;
-
-    const key = 'plankv' + w + '_' + h;
-    if (!this.textures.exists(key)) this.textures.addCanvas(key, c);
-
-    const plank = this.planks.create(x + w / 2, topY + h / 2, key);
-    const body = plank.body;
-    body.allowGravity = false;
-    body.checkCollision.up = true;   // one-way top only
-    body.checkCollision.down = false;
-    body.checkCollision.left = false;
-    body.checkCollision.right = false;
-    return plank;
-  }
-
-  makePlayer() {
-    // Draw the runner frames on a plain canvas (reliable colors) and
-    // register them as textures.
-    const draw = (ctx, pose) => {
-      // Cap + head + torso, drawn so it can be re-applied over limbs/arms in
-      // the jump poses (prevents grey arm pixels from showing as dots on the
-      // body).
-      const paintBody = () => {
-        ctx.fillStyle = PAL.playerAccent;
-        ctx.fillRect(3, 2, 16, 6);
-        ctx.fillStyle = PAL.player;
-        ctx.fillRect(3, 7, 16, 4);
-        ctx.beginPath();
-        ctx.moveTo(6, 12); ctx.lineTo(19, 12);
-        ctx.quadraticCurveTo(22, 12, 22, 15);
-        ctx.lineTo(22, 27);
-        ctx.quadraticCurveTo(22, 30, 19, 30);
-        ctx.lineTo(6, 30);
-        ctx.quadraticCurveTo(3, 30, 3, 27);
-        ctx.lineTo(3, 15);
-        ctx.quadraticCurveTo(3, 12, 6, 12);
-        ctx.fill();
-      };
-      paintBody();
-      const grey = '#6a6053';
-      if (pose === 'crouch') {
-        // Crouch (take-off load): knees driven up toward the chest, body
-        // compressed low. Arms drawn first, then the body re-painted over them
-        // so no grey pixels mar the torso.
-        // Arms swung back behind the hips for the wind-up.
-        ctx.fillStyle = grey;
-        ctx.fillRect(1, 25, 23, 2);
-        // Re-paint the body over the arms (removes grey dots over the torso).
-        paintBody();
-        // Redraw the bent legs so the crouch still reads.
-        ctx.fillStyle = PAL.player;
-        ctx.fillRect(4, 23, 6, 5);       // raised thigh
-        ctx.fillRect(12, 23, 6, 5);      // raised thigh
-        ctx.fillRect(4, 28, 5, 3);       // folded shin
-        ctx.fillRect(13, 28, 5, 3);      // folded shin
-        ctx.fillRect(4, 31, 6, 2);       // foot
-        ctx.fillRect(12, 31, 6, 2);      // foot
-      } else if (pose === 'stretch') {
-        // Jump stretch: body fully extended mid-air — front leg thrust
-        // forward/down, hind leg trailing. Arms (overhead) drawn first, then the
-        // body re-painted so no grey pixels appear on the head/torso.
-        // Arms stretched up overhead in a clean launch line.
-        ctx.fillStyle = grey;
-        ctx.fillRect(8, 14, 2, 6);
-        ctx.fillRect(12, 8, 2, 12);
-        ctx.fillRect(9, 6, 4, 3);
-        // Re-paint the body (cap + head + torso) over the arms.
-        paintBody();
-        // Redraw the extended legs so the stretch still reads.
-        ctx.fillStyle = PAL.player;
-        ctx.fillRect(4, 27, 6, 8);   // hind leg, extended down-back
-        ctx.fillRect(13, 26, 6, 9);  // front leg, extended toward the ground
-        ctx.fillRect(4, 35, 6, 1);   // pointed foot
-        ctx.fillRect(13, 35, 6, 1);  // pointed foot
-      } else if (pose === 0) {
-        // Walk stride A: legs apart, left foot forward.
-        ctx.fillStyle = PAL.player;
-        ctx.fillRect(5, 29, 5, 6);       // rear leg
-        ctx.fillRect(12, 28, 5, 7);      // front leg
-        ctx.fillRect(6, 33, 5, 3);       // rear foot
-        ctx.fillRect(12, 33, 6, 3);      // front foot
-        ctx.fillStyle = grey;
-        ctx.fillRect(1, 34, 20, 2);      // arm at side
-      } else if (pose === 1) {
-        // Walk pose B: legs passing together (feet nearly meeting).
-        ctx.fillStyle = PAL.player;
-        ctx.fillRect(6, 29, 4, 5);       // rear leg, lifted
-        ctx.fillRect(11, 29, 4, 5);      // front leg, stride
-        ctx.fillRect(6, 33, 4, 3);       // rear foot
-        ctx.fillRect(11, 33, 4, 3);      // front foot
-        ctx.fillStyle = grey;
-        ctx.fillRect(1, 33, 8, 2);      // arm swung back
-        ctx.fillStyle = grey;
-        ctx.fillRect(13, 33, 8, 2);      // arm swung forward
-      } else {
-        // Walk stride C: legs apart opposite (right foot forward).
-        ctx.fillStyle = PAL.player;
-        ctx.fillRect(5, 28, 5, 7);       // front leg
-        ctx.fillRect(12, 29, 5, 6);      // rear leg
-        ctx.fillRect(5, 33, 6, 3);       // front foot
-        ctx.fillRect(12, 33, 5, 3);      // rear foot
-        ctx.fillStyle = grey;
-        ctx.fillRect(1, 34, 20, 2);      // arm at side
-      }
-    };
-
-    // ---- Walking animation ----
-    // Build a 3-frame spritesheet for the run cycle and register an
-    // animation. Each frame is one stride position 22x36, laid out side by
-    // side in a 66x36 canvas.
-    if (!this.textures.exists('runner-run')) {
-      const sheet = document.createElement('canvas');
-      sheet.width = 22 * 3; sheet.height = 36;
-      const sctx = sheet.getContext('2d');
-      for (let f = 0; f < 3; f++) {
-        draw(sctx, f);
-        sctx.translate(22, 0);
-      }
-      this.textures.addSpriteSheet('runner-run', sheet, { frameWidth: 22, frameHeight: 36 });
-    }
-    if (!this.anims.exists('runner-run-anim')) {
-      this.anims.create({
-        key: 'runner-run-anim',
-        frames: this.anims.generateFrameNumbers('runner-run', { start: 0, end: 2 }),
-        frameRate: 10,
-        repeat: -1,
-      });
-    }
-
-    // ---- Jump animation ----
-    // A 2-frame crouch -> stretch cycle: the runner loads down before the
-    // leap, then extends fully mid-air. Laid out side by side in a 44x36 sheet.
-    if (!this.textures.exists('runner-jump')) {
-      const sheet = document.createElement('canvas');
-      sheet.width = 22 * 2; sheet.height = 36;
-      const sctx = sheet.getContext('2d');
-      draw(sctx, 'crouch');
-      sctx.translate(22, 0);
-      draw(sctx, 'stretch');
-      this.textures.addSpriteSheet('runner-jump', sheet, { frameWidth: 22, frameHeight: 36 });
-    }
-    if (!this.anims.exists('runner-jump-anim')) {
-      this.anims.create({
-        key: 'runner-jump-anim',
-        frames: this.anims.generateFrameNumbers('runner-jump', { start: 0, end: 1 }),
-        frameRate: 12,
-        repeat: 0,
-      });
-    }
-
-
-
-    // Spawn feet ON TOP of the starting base's cap.
-    const spawnY = TUNE.startTop - 18 - 2;
-    this.player = this.physics.add.sprite(TUNE.spawnX, spawnY, 'runner-run');
-    this.player.setDepth(10);
-    this.player.setScale(1);
-    this.player.body.collideWorldBounds = true;   // stay inside the play area
-    this.player.play('runner-run-anim');   // start the walking cycle
-  }
-
+  // ==========================================================================
+  // MAIN UPDATE
+  // ==========================================================================
   update(time, delta) {
-    const p = this.player;
+    this.fillPath();
+    this.fillHouses();
+    this.updateFog(delta);
 
-    this.fillSkyline();
-    this.fillPlanks();
-    this.updateSmoke(delta);
+    if (!this.dying) {
+      this.stepPhysics(time, delta);
+      this.wind.update(this.vz, this.vy);
+      this.hud.setText(Math.round(this.runZ / 40) + ' m');
+      this.distance = Math.max(this.distance || 0, Math.floor(this.runZ / 40));
+      if (typeof window !== 'undefined') {
+        window.__px = Math.round(this.project(this.lane * 130, 0, this.runZ).x);
+        window.__wind = { on: this.wind.isActive(), ctxState: this.wind.ctx ? this.wind.ctx.state : null };
+        window.__py = Math.round(this.yPos);
+        window.__pyVel = Math.round(this.vy);
+        window.__grounded = this.grounded;
+        window.__caps = this.caps.length;
+      }
+    } else if (time - this._deathTime >= TUNE.deathFlash) {
+      this.scene.restart();
+    } else if (typeof window !== 'undefined') {
+      window.__pyVel = Math.round(this.vy);
+      window.__grounded = this.grounded;
+    }
 
-    // Free movement + finite jump: WASD / arrows steer, and jump (W / Up /
-    // SPACE) gives a single upward impulse instead of continuous flight.
-    const frozen = this.dying;
-    const moveLeft   = this.keys.LEFT.isDown || this.keys.A.isDown;
-    const moveRight  = this.keys.RIGHT.isDown || this.keys.D.isDown;
-    const jumpHeld   = this.keys.UP.isDown || this.keys.W.isDown || this.keys.SPACE.isDown;
-    const moveDown   = this.keys.DOWN.isDown || this.keys.S.isDown;
-    p.setVelocityX(frozen ? 0 : (moveRight ? 1 : 0) * TUNE.runSpeed + (moveLeft ? -1 : 0) * TUNE.runSpeed);
+    // Velocity-based view dip: jumps kick the world down briefly and it
+    // settles back to 0, so the camera never drifts toward a gray void.
+    this.viewY = Math.max(-40, Math.min(40, -this.vy * 0.15));
+    this.renderScene();
+  }
 
-    const ground = p.body.blocked.down || p.body.touching.down;
-    // Jump only on a fresh press (edge), so holding the key can't make you fly.
-    if (!frozen && jumpHeld && !this._jumpPrev) {
-      if (ground) {
-        p.setVelocityY(-TUNE.jumpVelocity);
+  // ---- Forward run + jump physics ----
+  stepPhysics(time, delta) {
+    const dt = Math.min(delta, 50) / 1000;
+    this.vz = TUNE.runSpeed;
+    this.runZ += this.vz * dt;
+
+    // lateral lane steering (first-person: weave between lanes with A / D)
+    const left = this.keys.LEFT.isDown || this.keys.A.isDown;
+    const right = this.keys.RIGHT.isDown || this.keys.D.isDown;
+    if (right) this.lane = Math.min(1, this.lane + 0.05);
+    if (left) this.lane = Math.max(-1, this.lane - 0.05);
+    const jumpHeld = this.keys.SPACE.isDown || this.keys.W.isDown || this.keys.UP.isDown;
+    const moveDown = this.keys.DOWN.isDown || this.keys.S.isDown;
+
+    // vertical physics (screen-y: smaller y = higher)
+    this.vy += TUNE.gravity * dt * (this.grounded ? 0 : 1);
+    this.yPos += this.vy * dt;
+    if (moveDown && !this.grounded) this.vy = Math.min(this.vy, TUNE.climbSpeed);
+
+    if (jumpHeld && !this._jumpPrev) {
+      if (this.grounded) {
+        this.vy = -TUNE.jumpVelocity;
+        this.grounded = false;
         this._airJumps = 0;
       } else if (this._airJumps === 0) {
-        p.setVelocityY(-TUNE.doubleJumpVelocity);   // double jump in the air
+        this.vy = -TUNE.doubleJumpVelocity;
         this._airJumps = 1;
       }
     }
     this._jumpPrev = jumpHeld;
-    if (ground) this._airJumps = 0;
-    // Otherwise only gravity and the down push act on y - holding up can't lift.
-    if (!frozen && moveDown && !ground) p.setVelocityY(TUNE.climbSpeed);
-    this.applyRunFrame(ground);
-    // Track furthest point reached, not oscillating position.
-    this.distance = Math.max(this.distance || 0, Math.floor(p.x / 40));
-    this.hud.setText(this.distance + ' m');
 
-    // Debug state for headless e2e.
-    if (typeof window !== 'undefined') {
-      window.__px = p.x; window.__py = p.y;
-      window.__scrollX = this.cameras.main.scrollX;
-      window.__scrollY = this.cameras.main.scrollY;
-      window.__grounded = ground;
-      window.__planks = this.planks ? this.planks.getLength() : -1;
-      window.__pyVel = p.body.velocity.y;
-      const first = this.planks.children ? this.planks.children.entries[0] : null;
-      const pb = first ? { hasOwn: Object.prototype.hasOwnProperty.call(first, 'body'), x: first.body && first.body.x, y: first.body && first.body.y, w: first.body && first.body.width, h: first.body && first.body.height, immovable: first.body && first.body.immovable, cls: first.constructor && first.constructor.name } : null;
-      window.__plankBody = pb;
-      window.__groupLen = this.planks.children ? this.planks.children.length : -1;
-      // Expose each plank's horizontal span [x0, x1] for auto-play tests.
-      const spans = [];
-      if (this.planks.children) {
-        for (const pl of this.planks.children.entries) {
-          if (pl && pl.body) spans.push([pl.x - pl.displayWidth / 2, pl.x + pl.displayWidth / 2]);
+    // land on the nearest log cap under (not above) the feet
+    let landed = false;
+    for (let i = 0; i < this.caps.length; i++) {
+      const cap = this.caps[i];
+      if (!cap.live) continue;
+      const z0 = cap.z - cap.r, z1 = cap.z + cap.r;
+      if (this.runZ >= z0 && this.runZ <= z1) {
+        const capTopY = TUNE.startTop - cap.top;
+        // feet pass onto the cap top while traveling downward (vy >= 0)
+        if (this.vy >= 0 && this.yPos >= capTopY - 6 && this.yPos <= capTopY + TUNE.climbStep) {
+          this.grounded = true;
+          this.yPos = capTopY;
+          this.vy = 0;
+          this._airJumps = 0;
+          landed = true;
+          break;
         }
       }
-      window.__plankSpans = spans;
-      // Next log cap ahead: [x0, x1]; higher = its top is above the runner's
-      // feet (needs a jump). null if none ahead.
-      let cap = null;
-      let capHigher = false;
-      if (this.planks.children) {
-        const entries = this.planks.children.entries;
-        for (const pl of entries) {
-          if (!pl || !pl.body) continue;
-          const ptop = pl.y - pl.displayHeight / 2;
-          const x0 = pl.x - pl.displayWidth / 2;
-          if (x0 > p.x + 6) {
-            cap = [x0, x0 + pl.displayWidth];
-            capHigher = ptop < p.y - 12;
-            break;
-          }
-        }
-      }
-      window.__nextCap = cap;
-      window.__nextCapHigher = capHigher;
-      window.__runnerBody = { x: p.body.x, y: p.body.y, w: p.body.width, h: p.body.height };
-      window.__wind = {
-        on: this.wind.isActive(),
-        ctxState: this.wind.ctx ? this.wind.ctx.state : 'none',
-      };
     }
+    if (!landed && this.grounded) this.grounded = false;
 
-    // Fail when the runner drops below the world.
-    // Fall deeper before resetting (past the bottom of the view and through
-    // the fog) — the longer plunge shows off the smoke before respawning.
-    if (!this.dying && p.y > TUNE.height + TUNE.worldDeep - TUNE.resetMargin) {
+    if (this.yPos > TUNE.height + TUNE.worldDeep - 200) {
       this.startDeath();
     }
-    // Hold the inverted palette for a beat, then reset — the eerie flash is
-    // what sells the death here, so give it room to linger.
-    if (this.dying && time - this._deathTime >= TUNE.deathFlash) {
-      this.scene.restart();
-    }
-
-    // Wind reacts to how fast the runner is cutting through the air.
-    this.wind.update(p.body.velocity.x, p.body.velocity.y);
-
   }
 
-  // Keep the runner animated: walk cycle only while actually moving on the
-  // ground, a still standing pose when idle, and a static jump frame airborne.
-  applyRunFrame(ground) {
-    const p = this.player;
-    const moving = Math.abs(p.body.velocity.x) > 10;
-    if (ground && moving) {
-      // Moving on the ground: run the walk cycle.
-      if (p.texture.key !== 'runner-run' || !p.anims.isPlaying) {
-        p.play('runner-run-anim');
-      }
-    } else if (ground) {
-      // Standing still: freeze on a neutral standing frame (feet together).
-      this.player.anims.stop();
-      p.setTexture('runner-run', 1);
-    } else if (p.texture.key !== 'runner-jump') {
-      // Airborne: play the crouch -> stretch jump once, then hold it.
-      p.play('runner-jump-anim');
-    }
-    p.setFlipX(p.body.velocity.x < -1);
-    p.setScale(1, 1);
-  }
-
-  // On a fatal fall, invert the entire rendered frame for TUNE.deathFlash ms.
-  // A color-matrix negate on the camera postFX flips every color on screen,
-  // giving the whole world a sickening, otherworldly negative as you sink
-  // into the void.
+  // ---- Death flash ----
   startDeath() {
     this.dying = true;
     this._deathTime = this.time.now;
-    // Invert the whole frame for the death flash: the camera’s postFX
-    // color-matrix negate flips every color on screen — a full-screen,
-    // sickening negative as you sink below the world. WebGL only (postFX is
-    // a no-op under the Canvas renderer, which is just the headless check
-    // path — the browser plays in WebGL).
     this._invFx = this.cameras.main.postFX.addColorMatrix();
     this._invFx.negative();
-    // A violent little shake sells the impact as the world inverts.
     this.cameras.main.shake(TUNE.deathFlash, 0.012);
-    // A glitchy stutter as the world inverts — the sound of being reset.
     playGlitch(this.sound ? this.sound.context : null);
     if (typeof window !== 'undefined') window.__dying = true;
   }
+
+  renderScene() {
+    for (let i = 0; i < this.caps.length; i++) {
+      const cap = this.caps[i];
+      const dz = cap.z - this.runZ;
+      if (dz < 8 || dz > this.f * 4) { cap.img.setVisible(false); continue; }
+      const worldY = this.groundY(dz) - cap.top - 120;
+      const p = this.project((cap.lane - this.lane) * 90, worldY, dz);
+      const screenR = Math.max(1.5, cap.r * p.s * 1.7);
+      cap.img.setVisible(true);
+      cap.img.setPosition(p.x, p.y);
+      cap.img.setScale(screenR / 64, screenR / 64);
+      cap.img.setAlpha(1);              // solid log top — never see-through
+      cap.img.setTint(0xffffff);        // plain colours
+    }
+
+    for (let h = 0; h < this.houses.length; h++) {
+      const ho = this.houses[h];
+      const hz = ho.z - this.runZ;
+      if (hz < 20 || hz > this.f * 5) { ho.img.setVisible(false); continue; }
+      const worldX = ho.side * ho.lane - this.lane * 60;
+      const p0 = this.project(worldX, this.groundY(hz), hz);
+      const p1 = this.project(worldX, this.groundY(hz) - ho.top, hz);
+      const wpx = 180 * p1.s, hpx = 150 * p1.s;
+      if (wpx < 2 || hpx < 2) { ho.img.setVisible(false); continue; }
+      ho.img.setVisible(true);
+      ho.img.setPosition(p0.x, (p0.y + p1.y) / 2);
+      ho.img.setScale(wpx / 180, hpx / 150);
+      ho.img.setAlpha(0.35 + 0.65 * Math.min(1, p1.s * 1.4));  // stay visible with distance fade
+      const stp1 = Math.min(1, p1.s * 1.2);
+      const col = Phaser.Display.Color.Interpolate.ColorWithColor(
+        new Phaser.Display.Color(0xd7, 0xc6, 0xa8),
+        new Phaser.Display.Color(0x8a, 0x7a, 0x60),
+        1 - stp1, new Phaser.Display.Color());
+      ho.img.setTint((col.red << 16) | (col.green << 8) | col.blue, 0xffffff, 0xffffff, 0xffffff);
+    }
+  }
 }
 
-
-
-// Draw a warm, lit window with a frame on the given context.
-function drawWindow(ctx, x, y, w, h, frame) {
-  ctx.fillStyle = frame;
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = '#f0d27a';      // warm glow
-  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';   // glass gleam
-  ctx.fillRect(x + 3, y + 3, Math.max(2, Math.floor((w - 6) / 2)), 2);
-}
-function randInt(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo)); }
-
-// Return a darkened (or lightened, mult>1) version of a #rrggbb color.
-function shade(hex, mult) {
+// ---- shared helpers ----
+function shade(hex, f) {
   const n = parseInt(hex.slice(1), 16);
-  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  r = Math.max(0, Math.min(255, Math.round(r * mult)));
-  g = Math.max(0, Math.min(255, Math.round(g * mult)));
-  b = Math.max(0, Math.min(255, Math.round(b * mult)));
-  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+  const r = Math.round(((n >> 16) & 255)) * f;
+  const g = Math.round(((n >> 8) & 255)) * f;
+  const b = Math.round((n & 255)) * f;
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
-function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
 
-// Next log-top elevation: mainly climb upward (within the reachable band),
-// stepping back down a little once it gets too high so the run stays bounded.
-function nextTop(prev) {
-  // Smaller y = higher on screen. Mostly climb upward; allow only small
-  // descents so a run-off always lands on the close next cap. Stay in band.
-  const up = Math.random() < 0.7;
-  const n = up
-    ? prev - TUNE.climbStep * (0.3 + Math.random() * 0.8)
-    : prev + TUNE.descendStep * Math.random();
-  return Math.max(TUNE.logTopHigh, Math.min(TUNE.logTopMax, n));
+function rand(min, max) { return Math.random() * (max - min) + min; }
+
+function drawWindow(ctx, x, y, w, h, frame) {
+  ctx.fillStyle = frame; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#f0d27a'; ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(x + 2, y + 2, (w - 4) / 2, 2);
+  ctx.fillStyle = frame; ctx.fillRect(x + w / 2 - 1, y + 2, 2, h - 4);
+  ctx.fillRect(x + 2, y + h / 2 - 1, w - 4, 2);
 }

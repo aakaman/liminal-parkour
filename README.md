@@ -1,12 +1,14 @@
 # Liminal Parkour — gameplay-first prototype
 
-A floating parkour game among endless vertical wooden logs. Move the runner
-freely with the keyboard and perch on the log tops as the run climbs. The logs
-are tall (their bottoms are off-screen) and their landing caps are only a bit
-wider than the runner, so aim carefully. Fall and the run restarts.
+An endless first-person forward parkour run down a receding avenue of log ends,
+with family houses flanking both sides converging to the horizon. You
+automatically run forward; jump to clear the gaps between log caps and climb
+the path. Fail a jump and you fall into the void — the world inverts, a glitch
+sounds, and the run restarts.
 
-Built with Phaser 3 + Vite. Currently gameplay-first (simple, deliberate
-grayish-brown visuals; the liminal atmosphere comes in a later pass).
+Built with Phaser 3 + Vite. The pseudo-3D depth is a perspective billboard
+projection (objects shrink and recede toward a vanishing point), so there is no
+3D engine — it runs in the Canvas/WebGL renderer.
 
 ## Run
 
@@ -20,12 +22,13 @@ policy blocks `npm.ps1`.
 
 ## Controls
 
-- `W` / `ARROW UP` — move up
-- `S` / `ARROW DOWN` — move down
-- `A` / `ARROW LEFT` — move left
-- `D` / `ARROW RIGHT` — move right
+- `SPACE` / `W` / `ARROW UP` — jump (press again mid-air to double-jump)
+- `S` / `ARROW DOWN` — drop faster while airborne
+- `A` / `ARROW LEFT` — sway left
+- `D` / `ARROW RIGHT` — sway right
 
-The runner moves freely in all four directions (no auto-run).
+You auto-run forward; jump to clear gaps and climb the log caps. Steer slightly
+side to side to weave along the path. Fall off and the run restarts.
 
 ## Audio
 

@@ -55,6 +55,7 @@ export class GameScene extends Phaser.Scene {
     this.makeHouses();
     this.makeSkylineBackdrop();
     this.makeFog();
+    this.makeLandingMarker();
 
     // HUD.
     this.hud = this.add.text(16, 12, '0 m', {
@@ -103,29 +104,44 @@ export class GameScene extends Phaser.Scene {
 
   makeCapTexture() {
     if (this.textures.exists('cap')) return;
-    const R = 64, c = document.createElement('canvas');
-    c.width = c.height = R * 2;
+    // A standing log stump seen from head-on: a bright circular top (the
+    // landing cap) above a bark body that drops into the void. Reading as a
+    // real log makes gaps and pits obvious so jumping/losing is clear.
+    const TW = 96;        // top diameter (and sprite width)
+    const BODY = 240;     // bark body height below the top
+    const R = TW / 2;
+    const c = document.createElement('canvas');
+    c.width = TW; c.height = TW + BODY;
     const ctx = c.getContext('2d');
-    // Opaque log end: bright wooden face ringed by bark, like the top of a
-    // log seen from head-on. Fully solid so distant caps never go see-through.
-    // Exposed face (light wood).
-    ctx.fillStyle = PAL.plankTop;
-    ctx.beginPath(); ctx.arc(R, R, R, 0, Math.PI * 2); ctx.fill();
-    // Slight top-light highlight.
-    const shine = ctx.createRadialGradient(R - 8, R - 14, 6, R, R, R);
-    shine.addColorStop(0, PAL.plankTopHi);
-    shine.addColorStop(0.35, PAL.plankTop);
-    shine.addColorStop(0.78, PAL.plankWhole);
-    shine.addColorStop(1, PAL.plankEdge);
+    const P = PAL;
+    // Bark body (vertical log trunk).
+    ctx.fillStyle = P.plankWhole;
+    ctx.fillRect(R - R + 4, R, TW - 8, BODY);
+    ctx.fillStyle = P.plankWholeDark;
+    ctx.fillRect(2, R, 6, BODY);            // left shading
+    ctx.fillStyle = 'rgba(40,26,12,0.35)';
+    ctx.fillRect(TW - 8, R, 6, BODY);       // right shadow
+    // Bark grain ticks.
+    ctx.strokeStyle = P.plankRing; ctx.globalAlpha = 0.5; ctx.lineWidth = 2;
+    for (let y = R + 18; y < R + BODY - 8; y += 26) {
+      ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(TW - 8, y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // Rounded top of the trunk (slight ridge above the body).
+    ctx.fillStyle = P.plankWhole;
+    ctx.beginPath(); ctx.ellipse(R, R, R - 2, 10, 0, 0, Math.PI * 2); ctx.fill();
+    // Bright exposed log end (the landing face).
+    const shine = ctx.createRadialGradient(R - 10, R - 12, 6, R, R - 6, R + 2);
+    shine.addColorStop(0, P.plankTopHi);
+    shine.addColorStop(0.45, P.plankTop);
+    shine.addColorStop(0.8, P.plankWhole);
+    shine.addColorStop(1, P.plankEdge);
     ctx.fillStyle = shine;
-    ctx.beginPath(); ctx.arc(R, R, R, 0, Math.PI * 2); ctx.fill();
-    // Bark ring around the rim.
-    ctx.strokeStyle = PAL.plankEdge; ctx.lineWidth = 9; ctx.globalAlpha = 1;
-    ctx.beginPath(); ctx.arc(R, R, R - 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(R, R, R - 2, 10, 0, 0, Math.PI * 2); ctx.fill();
     // Grain rings in the exposed face.
-    ctx.strokeStyle = PAL.plankRing; ctx.globalAlpha = 0.55; ctx.lineWidth = 3;
-    for (let r = 15; r < R - 10; r += 9) {
-      ctx.beginPath(); ctx.arc(R, R, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = P.plankRing; ctx.globalAlpha = 0.55; ctx.lineWidth = 2;
+    for (let r = 12; r < R - 6; r += 7) {
+      ctx.beginPath(); ctx.ellipse(R, R, r, r * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
     this.textures.addCanvas('cap', c);
@@ -142,17 +158,14 @@ export class GameScene extends Phaser.Scene {
   fillPath() {
     const POP_AHEAD = this.f * 6;
     while (this._nextZ < this.runZ + POP_AHEAD) {
-      const gap = Phaser.Math.Between(TUNE.gapMin, TUNE.gapMax);
-      this._nextZ += gap;
+      const gap = Phaser.Math.Between(70, 120);
+      this._nextZ += gap + 40;
       const goUp = Phaser.Math.FloatBetween(0, 1) < 0.5;
       const delta = goUp
         ? -Phaser.Math.Between(12, TUNE.climbStep)
         : Phaser.Math.Between(-TUNE.descendStep, TUNE.descendStep);
       this._capTop = Math.max(-340, Math.min(TUNE.logTopMax, this._capTop + delta));
-      if (Phaser.Math.FloatBetween(0, 1) < 0.3) {
-        this._capLane = Phaser.Math.Between(-1, 1);
-      }
-      const r = Phaser.Math.Between(Math.round(TUNE.logWidth * 0.55), Math.round(TUNE.logWidth * 0.9));
+      const r = 26;
       this.makeCap(this._nextZ, this._capLane, this._capTop, r);
     }
     while (this.caps.length && this.caps[0].z < this.runZ - 320) {
@@ -235,6 +248,17 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Point(TUNE.width, gy),
       new Phaser.Geom.Point(0, gy)
     ], true);
+    // Dark pit below the path: the void between/around the logs. The log
+    // stumps draw on top, so the gaps between them read as falling-into.
+    var vg = this.add.graphics().setDepth(-42).setScrollFactor(0);
+    var vgrad = vg.fillGradientStyle(0x3a3228, 0x3a3228, 0x191510, 0x191510, 1);
+    vg.fillPoints([
+      new Phaser.Geom.Point(0, hy + 24),
+      new Phaser.Geom.Point(TUNE.width, hy + 24),
+      new Phaser.Geom.Point(TUNE.width, gy),
+      new Phaser.Geom.Point(0, gy)
+    ], true);
+    void vgrad;
   }
 
   // ---- Liminal fog ----
@@ -356,26 +380,39 @@ export class GameScene extends Phaser.Scene {
     }
     this._jumpPrev = jumpHeld;
 
-    // land on the nearest log cap under (not above) the feet
+    // Land on a log cap: the runner is "on" a cap while its feet span the
+    // cap, and landing snaps to the cap top. Track the top of the last log
+    // stood on so falling into a gap (the void) can be detected.
+    let under = null;
     let landed = false;
+    let underTopY = null;
     for (let i = 0; i < this.caps.length; i++) {
       const cap = this.caps[i];
       if (!cap.live) continue;
       const z0 = cap.z - cap.r, z1 = cap.z + cap.r;
       if (this.runZ >= z0 && this.runZ <= z1) {
         const capTopY = TUNE.startTop - cap.top;
-        // feet pass onto the cap top while traveling downward (vy >= 0)
-        if (this.vy >= 0 && this.yPos >= capTopY - 6 && this.yPos <= capTopY + TUNE.climbStep) {
+        under = true;
+        underTopY = capTopY;
+        if (this.vy >= 0 && this.yPos >= capTopY - 8 && this.yPos <= capTopY + TUNE.climbStep) {
           this.grounded = true;
           this.yPos = capTopY;
           this.vy = 0;
           this._airJumps = 0;
+          this._refTopY = capTopY;
           landed = true;
           break;
         }
       }
     }
     if (!landed && this.grounded) this.grounded = false;
+    if (this._refTopY === null || this._refTopY === undefined) this._refTopY = TUNE.startTop;
+
+    // Fallen into a gap/void: airborne, not over any cap, dropping, and
+    // well below the last log's top -> the jump was missed, you lose.
+    if (!this.grounded && !under && this.vy > 0 && this.yPos > this._refTopY + 200) {
+      this.startDeath();
+    }
 
     if (this.yPos > TUNE.height + TUNE.worldDeep - 200) {
       this.startDeath();
@@ -393,19 +430,46 @@ export class GameScene extends Phaser.Scene {
     if (typeof window !== 'undefined') window.__dying = true;
   }
 
+  // A bright "landing target" chevron that hovers over the next log you
+  // need to jump onto, so the jump target is always obvious.
+  makeLandingMarker() {
+    if (!this.textures.exists('marker')) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.strokeStyle = '#ffe9b0'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(32, 32, 22, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#ffe9b0';
+      ctx.beginPath();
+      ctx.moveTo(32, 44); ctx.lineTo(40, 56); ctx.lineTo(24, 56); ctx.closePath(); ctx.fill();
+      this.textures.addCanvas('marker', c);
+    }
+    this.marker = this.add.image(0, 0, 'marker').setDepth(12).setAlpha(0.9);
+    this._markerPulse = 0;
+  }
+
   renderScene() {
+    const NEAR = 4.2;   // legibility scale for a near log
     for (let i = 0; i < this.caps.length; i++) {
       const cap = this.caps[i];
       const dz = cap.z - this.runZ;
       if (dz < 8 || dz > this.f * 4) { cap.img.setVisible(false); continue; }
-      const worldY = this.groundY(dz) - cap.top - 120;
-      const p = this.project((cap.lane - this.lane) * 90, worldY, dz);
-      const screenR = Math.max(1.5, cap.r * p.s * 1.7);
+      // Perspective: near logs are wide and low, far logs shrink and rise
+      // toward the horizon. Each log END uses cap.top for its HEIGHT, so
+      // climbing logs visibly sit higher and dropping logs lower — this is
+      // what makes "jump up to the next log" readable.
+      const scl = this.f / (this.f + dz);
+      const roadY = (this.horizonY + 30) + (TUNE.height - 40 - (this.horizonY + 30)) * (scl * scl);
+      const y = roadY - cap.top * 0.55;
+      const x = this.vpx - this.lane * 60 * (1 - scl);
+      const k = scl * NEAR;    // NEAR set below for legibility
+      // clamp so the log end stays on screen and readable
       cap.img.setVisible(true);
-      cap.img.setPosition(p.x, p.y);
-      cap.img.setScale(screenR / 64, screenR / 64);
-      cap.img.setAlpha(1);              // solid log top — never see-through
-      cap.img.setTint(0xffffff);        // plain colours
+      cap.img.setOrigin(0.5, 0.155);
+      cap.img.setPosition(x, y);
+      cap.img.setScale(k, k);
+      cap.img.setAlpha(1);
+      cap.img.setTint(0xffffff);
     }
 
     for (let h = 0; h < this.houses.length; h++) {
@@ -427,6 +491,29 @@ export class GameScene extends Phaser.Scene {
         new Phaser.Display.Color(0x8a, 0x7a, 0x60),
         1 - stp1, new Phaser.Display.Color());
       ho.img.setTint((col.red << 16) | (col.green << 8) | col.blue, 0xffffff, 0xffffff, 0xffffff);
+    }
+
+    // Bright landing-target chevron on the next log to jump onto.
+    if (this.marker) {
+      let next = null, best = Infinity;
+      for (let i = 0; i < this.caps.length; i++) {
+        const c = this.caps[i];
+        const dz = c.z - this.runZ;
+        if (dz > 60 && dz < best && c.img.visible) { best = dz; next = c; }
+      }
+      if (next) {
+        const scl = this.f / (this.f + best);
+        const roadY = (this.horizonY + 30) + (TUNE.height - 40 - (this.horizonY + 30)) * (scl * scl);
+        const my = roadY - next.top * 0.55 - 30;
+        const mx = this.vpx - this.lane * 60 * (1 - scl);
+        this._markerPulse = (this._markerPulse || 0) + 0.12;
+        const pw = 1 + Math.sin(this._markerPulse) * 0.25;
+        this.marker.setVisible(true);
+        this.marker.setPosition(mx, my);
+        this.marker.setScale(pw, pw);
+      } else {
+        this.marker.setVisible(false);
+      }
     }
   }
 }

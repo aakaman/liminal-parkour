@@ -349,7 +349,7 @@ export class GameScene extends Phaser.Scene {
   makePlayer() {
     // Draw the runner frames on a plain canvas (reliable colors) and
     // register them as textures.
-    const draw = (ctx, tuck) => {
+    const draw = (ctx, pose) => {
       // Cap (accent).
       ctx.fillStyle = PAL.playerAccent;
       ctx.fillRect(3, 2, 16, 6);
@@ -367,16 +367,7 @@ export class GameScene extends Phaser.Scene {
       ctx.quadraticCurveTo(3, 12, 6, 12);
       ctx.fill();
       const grey = '#6a6053';
-      if (!tuck) {
-        // Run frame: legs apart (mid stride), arm swung at side.
-        ctx.fillStyle = PAL.player;
-        ctx.fillRect(5, 29, 5, 6);       // rear leg
-        ctx.fillRect(12, 28, 5, 7);      // front leg
-        ctx.fillRect(6, 33, 5, 3);       // rear foot
-        ctx.fillRect(12, 33, 6, 3);      // front foot
-        ctx.fillStyle = grey;
-        ctx.fillRect(1, 34, 20, 2);      // arm at side
-      } else {
+      if (pose === 'tuck') {
         // Jump frame: legs tucked under the body, arm up / forward.
         ctx.fillStyle = PAL.player;
         ctx.fillRect(5, 27, 6, 5);       // tucked thigh
@@ -387,16 +378,68 @@ export class GameScene extends Phaser.Scene {
         ctx.fillRect(1, 20, 6, 12);      // arm up / forward
         ctx.fillStyle = PAL.player;
         ctx.fillRect(15, 20, 5, 5);      // other arm back
+      } else if (pose === 0) {
+        // Walk stride A: legs apart, left foot forward.
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(5, 29, 5, 6);       // rear leg
+        ctx.fillRect(12, 28, 5, 7);      // front leg
+        ctx.fillRect(6, 33, 5, 3);       // rear foot
+        ctx.fillRect(12, 33, 6, 3);      // front foot
+        ctx.fillStyle = grey;
+        ctx.fillRect(1, 34, 20, 2);      // arm at side
+      } else if (pose === 1) {
+        // Walk pose B: legs passing together (feet nearly meeting).
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(6, 29, 4, 5);       // rear leg, lifted
+        ctx.fillRect(11, 29, 4, 5);      // front leg, stride
+        ctx.fillRect(6, 33, 4, 3);       // rear foot
+        ctx.fillRect(11, 33, 4, 3);      // front foot
+        ctx.fillStyle = grey;
+        ctx.fillRect(1, 33, 8, 2);      // arm swung back
+        ctx.fillStyle = grey;
+        ctx.fillRect(13, 33, 8, 2);      // arm swung forward
+      } else {
+        // Walk stride C: legs apart opposite (right foot forward).
+        ctx.fillStyle = PAL.player;
+        ctx.fillRect(5, 28, 5, 7);       // front leg
+        ctx.fillRect(12, 29, 5, 6);      // rear leg
+        ctx.fillRect(5, 33, 6, 3);       // front foot
+        ctx.fillRect(12, 33, 5, 3);      // rear foot
+        ctx.fillStyle = grey;
+        ctx.fillRect(1, 34, 20, 2);      // arm at side
       }
     };
 
-    const r = document.createElement('canvas');
-    r.width = 22; r.height = 36; draw(r.getContext('2d'), false);
-    if (!this.textures.exists('runner-run')) this.textures.addCanvas('runner-run', r);
+    // ---- Walking animation ----
+    // Build a 3-frame spritesheet for the run cycle and register an
+    // animation. Each frame is one stride position 22x36, laid out side by
+    // side in a 66x36 canvas.
+    if (!this.textures.exists('runner-run')) {
+      const sheet = document.createElement('canvas');
+      sheet.width = 22 * 3; sheet.height = 36;
+      const sctx = sheet.getContext('2d');
+      for (let f = 0; f < 3; f++) {
+        draw(sctx, f);
+        sctx.translate(22, 0);
+      }
+      this.textures.addSpritesheet('runner-run', sheet, { frameWidth: 22, frameHeight: 36 });
+    }
+    if (!this.anims.exists('runner-run-anim')) {
+      this.anims.create({
+        key: 'runner-run-anim',
+        frames: this.anims.generateFrameNumbers('runner-run', { start: 0, end: 2 }),
+        frameRate: 10,
+        repeat: -1,
+      });
+    }
 
-    const j = document.createElement('canvas');
-    j.width = 22; j.height = 36; draw(j.getContext('2d'), true);
-    if (!this.textures.exists('runner-jump')) this.textures.addCanvas('runner-jump', j);
+    // Jump frame stays a single static texture (airborne pose).
+    if (!this.textures.exists('runner-jump')) {
+      const j = document.createElement('canvas');
+      j.width = 22; j.height = 36; draw(j.getContext('2d'), 'tuck');
+      this.textures.addCanvas('runner-jump', j);
+    }
+
 
     // Spawn feet ON TOP of the starting base's cap.
     const spawnY = TUNE.startTop - 18 - 2;
@@ -404,6 +447,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setDepth(10);
     this.player.setScale(1);
     this.player.body.collideWorldBounds = true;   // stay inside the play area
+    this.player.play('runner-run-anim');   // start the walking cycle
   }
 
   update(time, delta) {
@@ -437,7 +481,7 @@ export class GameScene extends Phaser.Scene {
     if (ground) this._airJumps = 0;
     // Otherwise only gravity and the down push act on y - holding up can't lift.
     if (!frozen && moveDown && !ground) p.setVelocityY(TUNE.climbSpeed);
-    this.applyRunFrame();
+    this.applyRunFrame(ground);
     // Track furthest point reached, not oscillating position.
     this.distance = Math.max(this.distance || 0, Math.floor(p.x / 40));
     this.hud.setText(this.distance + ' m');
@@ -505,10 +549,19 @@ export class GameScene extends Phaser.Scene {
 
   }
 
-  // Keep the runner in its run frame and facing the way it's moving.
-  applyRunFrame() {
+  // Keep the runner animated: walking cycle on the ground, static jump
+  // frame while airborne. Also keep it facing the way it moves.
+  applyRunFrame(ground) {
     const p = this.player;
-    if (p.texture && p.texture.key !== 'runner-run') p.setTexture('runner-run');
+    if (ground) {
+      // On the ground: ensure the walk cycle is playing.
+      if (p.texture.key !== 'runner-run' || !p.anims.isPlaying) {
+        p.play('runner-run-anim');
+      }
+    } else if (p.texture.key !== 'runner-jump') {
+      // Airborne: freeze on the tucked jump pose.
+      p.setTexture('runner-jump');
+    }
     p.setFlipX(p.body.velocity.x < -1);
     p.setScale(1, 1);
   }
